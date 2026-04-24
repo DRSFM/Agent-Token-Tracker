@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <path d="M116 321C148 268 185 244 225 249C270 255 288 304 333 309C361 312 384 298 406 267" stroke="url(#line)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <g filter="url(#shadow)">
+    <ellipse cx="226" cy="188" rx="96" ry="39" fill="#EAF3FF"/>
+    <path d="M130 188V246C130 268 173 286 226 286C279 286 322 268 322 246V188" fill="#BFD9FF"/>
+    <ellipse cx="226" cy="246" rx="96" ry="39" fill="#D7E8FF"/>
+    <path d="M130 246V304C130 326 173 344 226 344C279 344 322 326 322 304V246" fill="#89B9FF"/>
+    <ellipse cx="226" cy="304" rx="96" ry="39" fill="#BFD9FF"/>
+    <ellipse cx="226" cy="188" rx="63" ry="22" fill="#3B82F6"/>
+  </g>
+  <circle cx="368" cy="161" r="54" fill="#20C997"/>
+  <path d="M342 163L359 180L397 137" stroke="white" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M110 396H402" stroke="white" stroke-opacity=".32" stroke-width="20" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="bg" x1="62" y1="52" x2="454" y2="462" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset=".52" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="line" x1="116" y1="249" x2="406" y2="321" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset=".5" stop-color="#34D399"/>
+      <stop offset="1" stop-color="#FBBF24"/>
+    </linearGradient>
+    <filter id="shadow" x="89" y="129" width="274" height="255" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0F172A" flood-opacity=".26"/>
+    </filter>
+  </defs>
+</svg>

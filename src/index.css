@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #f6f7fb;
+  color: #1f2937;
+  font-feature-settings: 'tnum' 1;
+  overflow: hidden;
+}
+
+html.dark body {
+  background: #0b1020;
+  color: #e5e7eb;
+}
+
+/* 用户上传背景层 (设置页可关闭) */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.app-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(246, 247, 251, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+html.dark .app-bg::after {
+  background: rgba(11, 16, 32, 0.5);
+}
+
+/* 静默模式淡出 = 5s 缓出；恢复（点击/键盘/滚轮）= 0.25s 快速回到工作态 */
+.app-shell .app-glass-layer {
+  transition:
+    opacity 0.25s ease-out,
+    filter 0.25s ease-out;
+}
+
+.app-shell .idle-hint {
+  transition: opacity 0.4s ease;
+}
+
+.app-shell.is-idle .app-glass-layer {
+  transition:
+    opacity 5s ease-out,
+    filter 5s ease-out;
+  opacity: 0.06;
+  filter: saturate(0.5) blur(0.3px);
+}
+
+/* 鼠标移入时给一点点反馈，方便用户找到目标 */
+.app-shell.is-idle .app-glass-layer:hover {
+  opacity: 0.14;
+}
+
+.app-shell.is-idle .app-bg::after {
+  background: rgba(246, 247, 251, 0.1);
+  backdrop-filter: blur(0.4px);
+  transition:
+    background 5s ease-out,
+    backdrop-filter 5s ease-out;
+}
+
+html.dark .app-shell.is-idle .app-bg::after {
+  background: rgba(11, 16, 32, 0.16);
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* 标题栏占位 (Electron hiddenInset 模式) */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}

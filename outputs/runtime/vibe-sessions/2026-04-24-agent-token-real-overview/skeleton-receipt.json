@@ -1,0 +1,12 @@
+{
+  "runId": "2026-04-24-agent-token-real-overview",
+  "stage": "skeleton_check",
+  "timestamp": "2026-04-24T00:00:00.000Z",
+  "repo": {
+    "gitRepository": false,
+    "stack": ["Electron", "Vite", "React", "TypeScript", "Tailwind CSS", "ECharts"],
+    "ipcHandlersImplemented": false
+  },
+  "decision": "Proceed with L-grade serial implementation."
+}
+
