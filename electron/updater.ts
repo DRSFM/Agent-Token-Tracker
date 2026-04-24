@@ -9,17 +9,21 @@ import type {
 
 const SETTINGS_FILE = 'update-settings.json'
 
-const defaultSettings: UpdateProviderSettings = { provider: 'none' }
+const defaultSettings: UpdateProviderSettings = {
+  provider: 'github',
+  owner: 'DRSFM',
+  repo: 'Agent-Token-Tracker',
+}
 
 let settings: UpdateProviderSettings | null = null
 let configuredKey = ''
 let checking = false
 let status: UpdateStatus = {
-  configured: false,
-  provider: 'none',
+  configured: true,
+  provider: defaultSettings.provider,
   currentVersion: app.getVersion(),
-  state: 'not-configured',
-  message: '未配置更新源',
+  state: 'idle',
+  updateSource: 'DRSFM/Agent-Token-Tracker',
 }
 
 function settingsPath() {

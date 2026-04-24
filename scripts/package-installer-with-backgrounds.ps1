@@ -4,7 +4,7 @@ $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $packageJson = Get-Content (Join-Path $root "package.json") -Raw | ConvertFrom-Json
 $version = $packageJson.version
 $releaseDir = Join-Path $root "release"
-$installerPath = Join-Path $releaseDir "Agent Token Tracker Setup $version.exe"
+$installerPath = Join-Path $releaseDir "Agent-Token-Tracker-Setup-$version.exe"
 $backgroundDir = Join-Path $releaseDir "示例背景图"
 $bundlePath = Join-Path $releaseDir "Agent-Token-Tracker-$version-installer-with-backgrounds.zip"
 

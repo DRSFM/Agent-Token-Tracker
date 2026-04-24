@@ -63,6 +63,7 @@
       "signAndEditExecutable": false
     },
     "nsis": {
+      "artifactName": "Agent-Token-Tracker-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
@@ -72,6 +73,13 @@
       "include": "build/installer.nsh",
       "deleteAppDataOnUninstall": false
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DRSFM",
+        "repo": "Agent-Token-Tracker"
+      }
+    ],
     "mac": {
       "target": "dmg",
       "icon": "assets/app-icon.png"
