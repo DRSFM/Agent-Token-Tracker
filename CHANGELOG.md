@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-04-25
+
+### Removed
+- 清掉公开仓库里残留的 vibe-coding 编排器过程文件（`outputs/runtime/vibe-sessions/`、`docs/plans/`、`docs/requirements/`）
+- `.claude/` 目录加入 .gitignore 防止本机元数据外泄
+
+### Changed
+- 与 1.1.3 功能完全一致，仅做仓库清理
+
 ## [1.1.3] - 2026-04-25
 
 ### Added
