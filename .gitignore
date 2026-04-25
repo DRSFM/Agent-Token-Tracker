@@ -12,3 +12,11 @@ release
 
 # Internal dev handoff docs (not for public repo)
 HANDOFF_FOR_CODEX.md
+
+# Vibe-coding orchestrator process artifacts
+outputs/
+docs/plans/
+docs/requirements/
+
+# Claude Code project metadata (per-machine paths, worktrees)
+.claude/
