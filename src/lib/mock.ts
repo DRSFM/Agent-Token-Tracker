@@ -241,6 +241,33 @@ export const mockAPI: TokenAPI = {
   async openLocalPath(kind) {
     return { ok: true, path: kind === 'cache' ? 'mock-cache' : `mock-${kind}` }
   },
+  async getRemoteSourceSettings() {
+    return {
+      enabled: false,
+      host: '',
+      user: '',
+      port: 22,
+      claudePath: '~/.claude/projects',
+      codexPath: '~/.codex/sessions',
+    }
+  },
+  async setRemoteSourceSettings(settings) {
+    return settings
+  },
+  async getRemoteSyncStatus() {
+    return {
+      configured: false,
+      cachePath: 'mock-remote-cache',
+      claudeCachePath: 'mock-remote-cache/.claude/projects',
+      codexCachePath: 'mock-remote-cache/.codex/sessions',
+    }
+  },
+  async testRemoteConnection() {
+    return { ok: false, message: 'Mock 环境不可测试 SSH。' }
+  },
+  async syncRemoteLogs() {
+    return { ok: false, message: 'Mock 环境不可同步 SSH。' }
+  },
   async getUpdateSettings() {
     return { provider: 'none' }
   },

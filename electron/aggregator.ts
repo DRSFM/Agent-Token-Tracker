@@ -16,6 +16,11 @@ import type {
 import { claudeCodeRoot, scanClaudeCode } from './scanners/claude'
 import { codexSessionsRoot, scanCodex } from './scanners/codex'
 import { cacheKey, type CachedSourceFile, type SourceScanResult } from './scanners/shared'
+import {
+  getRemoteSourceSettings,
+  remoteClaudeCacheRoot,
+  remoteCodexCacheRoot,
+} from './remote-sync'
 
 interface ScanState {
   records: RequestRecord[]
@@ -196,7 +201,24 @@ export class TokenDataStore {
 
   private async runScan() {
     const cache = await loadScanCache()
-    const settled = await Promise.allSettled([scanClaudeCode(cache), scanCodex(cache)])
+    const remoteSettings = await getRemoteSourceSettings()
+    const scanTasks: Promise<SourceScanResult>[] = [scanClaudeCode(cache), scanCodex(cache)]
+
+    if (remoteSettings.enabled && remoteSettings.host) {
+      const remoteLabel = remoteSettings.host
+      scanTasks.push(
+        scanClaudeCode(cache, remoteClaudeCacheRoot()).then((result) => ({
+          ...result,
+          label: `Remote Claude Code (${remoteLabel})`,
+        })),
+        scanCodex(cache, remoteCodexCacheRoot()).then((result) => ({
+          ...result,
+          label: `Remote Codex (${remoteLabel})`,
+        })),
+      )
+    }
+
+    const settled = await Promise.allSettled(scanTasks)
     const fulfilled = settled.flatMap((result) =>
       result.status === 'fulfilled' ? [result.value] : [],
     )

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import path from 'node:path'
 import type {
   AgentSource,
   DateRange,
@@ -7,6 +8,14 @@ import type {
 import { tokenDataStore } from './aggregator'
 import { claudeCodeRoot } from './scanners/claude'
 import { codexSessionsRoot } from './scanners/codex'
+import {
+  getRemoteSourceSettings,
+  getRemoteSyncStatus,
+  remoteCacheRoot,
+  setRemoteSourceSettings,
+  syncRemoteLogs,
+  testRemoteConnection,
+} from './remote-sync'
 import {
   checkForUpdates,
   downloadUpdate,
@@ -64,15 +73,34 @@ export function registerIpcHandlers() {
     return { cleared: result.cleared && state.scannedFiles >= 0 }
   })
 
-  ipcMain.handle('token:openLocalPath', async (_e, kind: AgentSource | 'cache') => {
+  ipcMain.handle('token:openLocalPath', async (_e, kind: AgentSource | 'cache' | 'ssh-readme' | 'remote-cache') => {
     const targetPath =
       kind === 'claude-code'
         ? claudeCodeRoot()
         : kind === 'codex'
           ? codexSessionsRoot()
-          : app.getPath('userData')
+          : kind === 'ssh-readme'
+            ? app.isPackaged
+              ? path.join(process.resourcesPath, 'ssh.readme')
+              : path.join(app.getAppPath(), 'assets', 'ssh.readme')
+            : kind === 'remote-cache'
+              ? remoteCacheRoot()
+              : app.getPath('userData')
     const error = await shell.openPath(targetPath)
     return { ok: !error, path: targetPath, error: error || undefined }
+  })
+
+  ipcMain.handle('token:getRemoteSourceSettings', async () => getRemoteSourceSettings())
+  ipcMain.handle('token:setRemoteSourceSettings', async (_e, settings) => setRemoteSourceSettings(settings))
+  ipcMain.handle('token:getRemoteSyncStatus', async () => getRemoteSyncStatus())
+  ipcMain.handle('token:testRemoteConnection', async () => testRemoteConnection())
+  ipcMain.handle('token:syncRemoteLogs', async () => {
+    const result = await syncRemoteLogs()
+    if (result.ok) {
+      await tokenDataStore.rescan()
+      broadcastDataChanged()
+    }
+    return result
   })
 
   ipcMain.handle('token:getUpdateSettings', async () => getUpdateSettings())

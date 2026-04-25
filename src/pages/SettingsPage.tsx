@@ -11,11 +11,19 @@ import {
   RefreshCcw,
   DownloadCloud,
   Save,
+  Server,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import type { AgentSource, DataSourceStatus, UpdateProviderSettings, UpdateStatus } from '@/types/api'
+import type {
+  AgentSource,
+  DataSourceStatus,
+  RemoteSourceSettings,
+  RemoteSyncStatus,
+  UpdateProviderSettings,
+  UpdateStatus,
+} from '@/types/api'
 import { formatNumber, formatRelativeMinutes } from '@/lib/format'
 
 const THEMES: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
@@ -56,11 +64,22 @@ export default function SettingsPage() {
   } = useSettings()
   const [status, setStatus] = useState<DataSourceStatus | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
+  const [remoteSettings, setRemoteSettings] = useState<RemoteSourceSettings>({
+    enabled: false,
+    host: '',
+    user: '',
+    port: 22,
+    claudePath: '~/.claude/projects',
+    codexPath: '~/.codex/sessions',
+  })
+  const [remoteStatus, setRemoteStatus] = useState<RemoteSyncStatus | null>(null)
+  const [remoteMessage, setRemoteMessage] = useState('')
   const [updateProvider, setUpdateProvider] = useState<UpdateProviderSettings['provider']>('none')
   const [githubOwner, setGithubOwner] = useState('')
   const [githubRepo, setGithubRepo] = useState('')
   const [genericUrl, setGenericUrl] = useState('')
   const [busy, setBusy] = useState(false)
+  const [remoteBusy, setRemoteBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -76,6 +95,10 @@ export default function SettingsPage() {
     void reloadStatus()
     const off = api.onDataChanged(reloadStatus)
     return off
+  }, [])
+
+  useEffect(() => {
+    void reloadRemote()
   }, [])
 
   useEffect(() => {
@@ -101,6 +124,20 @@ export default function SettingsPage() {
       }
     } catch {
       setUpdateStatus(null)
+    }
+  }
+
+  const reloadRemote = async () => {
+    try {
+      const [settings, nextStatus] = await Promise.all([
+        api.getRemoteSourceSettings(),
+        api.getRemoteSyncStatus(),
+      ])
+      setRemoteSettings(settings)
+      setRemoteStatus(nextStatus)
+      setRemoteMessage(nextStatus.lastError ?? '')
+    } catch {
+      setRemoteMessage('读取远程配置失败。')
     }
   }
 
@@ -137,6 +174,50 @@ export default function SettingsPage() {
 
   const onOpenPath = (kind: AgentSource | 'cache') => {
     void api.openLocalPath(kind)
+  }
+
+  const onOpenSpecialPath = (kind: 'ssh-readme' | 'remote-cache') => {
+    void api.openLocalPath(kind)
+  }
+
+  const updateRemoteField = <K extends keyof RemoteSourceSettings>(
+    key: K,
+    value: RemoteSourceSettings[K],
+  ) => {
+    setRemoteSettings((current) => ({ ...current, [key]: value }))
+  }
+
+  const onSaveRemote = async () => {
+    setRemoteBusy(true)
+    try {
+      const saved = await api.setRemoteSourceSettings(remoteSettings)
+      setRemoteSettings(saved)
+      setRemoteMessage('远程数据源已保存。')
+      await reloadRemote()
+    } finally {
+      setRemoteBusy(false)
+    }
+  }
+
+  const onTestRemote = async () => {
+    setRemoteBusy(true)
+    try {
+      const result = await api.testRemoteConnection()
+      setRemoteMessage(result.message)
+    } finally {
+      setRemoteBusy(false)
+    }
+  }
+
+  const onSyncRemote = async () => {
+    setRemoteBusy(true)
+    try {
+      const result = await api.syncRemoteLogs()
+      setRemoteMessage(result.message)
+      await Promise.all([reloadRemote(), reloadStatus()])
+    } finally {
+      setRemoteBusy(false)
+    }
   }
 
   const onSaveUpdateSettings = async () => {
@@ -384,6 +465,154 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader
+          title="远程数据源"
+          subtitle={
+            remoteStatus?.lastSyncedAt
+              ? `上次同步 ${formatRelativeMinutes(remoteStatus.lastSyncedAt)}`
+              : '通过本机 SSH 只读同步远端日志'
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => onOpenSpecialPath('ssh-readme')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              SSH 填写指南
+            </button>
+          }
+        />
+        <CardBody className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm text-slate-600 dark:text-slate-300">启用远程同步</div>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                使用系统 ssh 拉取远端 JSONL 到本地缓存，不保存密码，不在远端常驻。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateRemoteField('enabled', !remoteSettings.enabled)}
+              className={cn(
+                'relative h-6 w-11 rounded-full transition shrink-0',
+                remoteSettings.enabled ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-700',
+              )}
+              aria-pressed={remoteSettings.enabled}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition',
+                  remoteSettings.enabled ? 'left-5' : 'left-0.5',
+                )}
+              />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <label className="sm:col-span-2 text-xs text-slate-500 dark:text-slate-400">
+              Host / SSH config alias
+              <input
+                value={remoteSettings.host}
+                onChange={(e) => updateRemoteField('host', e.target.value)}
+                placeholder="company-dev 或 xxx.company.com"
+                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
+              />
+            </label>
+            <label className="text-xs text-slate-500 dark:text-slate-400">
+              User 可选
+              <input
+                value={remoteSettings.user ?? ''}
+                onChange={(e) => updateRemoteField('user', e.target.value)}
+                placeholder="留空用 ssh config"
+                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
+              />
+            </label>
+            <label className="text-xs text-slate-500 dark:text-slate-400">
+              Port
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={remoteSettings.port ?? 22}
+                onChange={(e) => updateRemoteField('port', Number(e.target.value))}
+                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="text-xs text-slate-500 dark:text-slate-400">
+              Claude Code 远端路径
+              <input
+                value={remoteSettings.claudePath}
+                onChange={(e) => updateRemoteField('claudePath', e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
+              />
+            </label>
+            <label className="text-xs text-slate-500 dark:text-slate-400">
+              Codex 远端路径
+              <input
+                value={remoteSettings.codexPath}
+                onChange={(e) => updateRemoteField('codexPath', e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/60 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
+            <div className="flex items-center gap-2">
+              <Server className="w-4 h-4 text-slate-400" />
+              <span>{remoteMessage || '保存后可测试连接并同步远端日志。'}</span>
+            </div>
+            {remoteStatus?.cachePath && (
+              <code className="block mt-1 text-xs text-slate-400 truncate">
+                {remoteStatus.cachePath}
+              </code>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onSaveRemote}
+              disabled={remoteBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 text-xs text-white hover:bg-brand-600 disabled:opacity-50 transition"
+            >
+              <Save className="w-3.5 h-3.5" />
+              保存远程源
+            </button>
+            <button
+              type="button"
+              onClick={onTestRemote}
+              disabled={remoteBusy || !remoteSettings.enabled}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition"
+            >
+              <RefreshCcw className={cn('w-3.5 h-3.5', remoteBusy && 'animate-spin')} />
+              测试连接
+            </button>
+            <button
+              type="button"
+              onClick={onSyncRemote}
+              disabled={remoteBusy || !remoteSettings.enabled}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-xs text-white hover:bg-slate-800 disabled:opacity-50 transition"
+            >
+              <DownloadCloud className="w-3.5 h-3.5" />
+              同步远端日志
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenSpecialPath('remote-cache')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              打开缓存
+            </button>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
           title="数据源"
           subtitle={status ? `更新于 ${formatRelativeMinutes(status.lastUpdatedAt)}` : '本地估算'}
           action={
@@ -419,7 +648,7 @@ export default function SettingsPage() {
           <div className="text-sm text-slate-600 dark:text-slate-300 space-y-2">
             {(status?.sources ?? []).map((source) => (
               <div
-                key={source.source}
+                key={`${source.source}:${source.rootPath}`}
                 className="flex items-center justify-between gap-3 py-2 border-b border-slate-100 dark:border-slate-800"
               >
                 <div className="min-w-0">

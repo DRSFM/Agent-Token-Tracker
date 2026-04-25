@@ -152,6 +152,24 @@ export interface UpdateStatus {
   updateSource?: string
 }
 
+export interface RemoteSourceSettings {
+  enabled: boolean
+  host: string
+  user?: string
+  port?: number
+  claudePath: string
+  codexPath: string
+}
+
+export interface RemoteSyncStatus {
+  configured: boolean
+  lastSyncedAt?: string
+  lastError?: string
+  cachePath: string
+  claudeCachePath: string
+  codexCachePath: string
+}
+
 /** 时间范围筛选 */
 export type DateRange =
   | { kind: 'last-n-days'; days: number }
@@ -197,7 +215,22 @@ export interface TokenAPI {
   clearCache(): Promise<{ cleared: boolean }>
 
   /** 打开本地目录 */
-  openLocalPath(kind: AgentSource | 'cache'): Promise<{ ok: boolean; path: string; error?: string }>
+  openLocalPath(kind: AgentSource | 'cache' | 'ssh-readme' | 'remote-cache'): Promise<{ ok: boolean; path: string; error?: string }>
+
+  /** 获取远程 SSH 数据源配置 */
+  getRemoteSourceSettings(): Promise<RemoteSourceSettings>
+
+  /** 保存远程 SSH 数据源配置 */
+  setRemoteSourceSettings(settings: RemoteSourceSettings): Promise<RemoteSourceSettings>
+
+  /** 获取远程同步状态 */
+  getRemoteSyncStatus(): Promise<RemoteSyncStatus>
+
+  /** 测试远程 SSH 连接 */
+  testRemoteConnection(): Promise<{ ok: boolean; message: string }>
+
+  /** 同步远程日志到本地缓存并触发重扫 */
+  syncRemoteLogs(): Promise<{ ok: boolean; message: string; syncedAt?: string }>
 
   /** 获取更新源配置 */
   getUpdateSettings(): Promise<UpdateProviderSettings>

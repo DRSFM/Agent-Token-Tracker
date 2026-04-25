@@ -1,0 +1,36 @@
+SSH 填写示例
+
+示例 1：平时这样连接
+ssh user@xxx.company.com
+
+填写：
+Host: xxx.company.com
+User: user
+Port: 22
+
+示例 2：平时指定端口
+ssh -p 2222 user@1.2.3.4
+
+填写：
+Host: 1.2.3.4
+User: user
+Port: 2222
+
+示例 3：平时用 SSH config alias
+ssh company-dev
+
+填写：
+Host: company-dev
+User: 留空
+Port: 22
+
+常用查询命令：
+whoami
+ls ~/.claude/projects
+ls ~/.codex/sessions
+find ~/.claude/projects -name "*.jsonl" | head
+find ~/.codex/sessions -name "*.jsonl" | head
+
+默认路径：
+Claude Code: ~/.claude/projects
+Codex: ~/.codex/sessions
