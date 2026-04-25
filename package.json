@@ -13,6 +13,7 @@
     "electron:build": "tsc -b && vite build && electron-builder",
     "release:portable": "npm run build && electron-builder --win dir && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-portable.ps1",
     "release:installer": "npm run build && electron-builder --win nsis",
+    "release:mac": "npm run build && electron-builder --mac dmg",
     "release:friend": "npm run release:installer && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-installer-with-backgrounds.ps1",
     "lint": "tsc --noEmit",
     "test:backend": "tsx --test tests/backend/*.test.ts"
@@ -88,6 +89,7 @@
     ],
     "mac": {
       "target": "dmg",
+      "artifactName": "Agent-Token-Tracker-${version}-mac-${arch}.${ext}",
       "icon": "assets/app-icon.png"
     }
   }
