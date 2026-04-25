@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-04-26
+
+### Fixed
+- 给 `release:installer` / `release:mac` / `release:portable` 加 `--publish never` 标记，阻止 electron-builder 在打 tag 时自作主张去 GitHub 上传产物（缺 `GH_TOKEN` 会导致整个 job 失败）。GitHub Release 上传由 workflow 里的 softprops/action-gh-release 统一处理
+
 ## [1.1.5] - 2026-04-26
 
 ### Fixed
