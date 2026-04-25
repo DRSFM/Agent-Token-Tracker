@@ -4,6 +4,22 @@
   "description": "本地 Agent Token 计数器 — 估算 Claude Code / Codex 等本地 CLI 工具的 token 消耗",
   "author": "Token Dashboard Contributors",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DRSFM/Agent-Token-Tracker.git"
+  },
+  "homepage": "https://github.com/DRSFM/Agent-Token-Tracker#readme",
+  "bugs": {
+    "url": "https://github.com/DRSFM/Agent-Token-Tracker/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "token-tracker",
+    "electron",
+    "agent",
+    "cli"
+  ],
   "main": "dist-electron/main.js",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
