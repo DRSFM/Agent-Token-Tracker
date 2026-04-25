@@ -9,3 +9,6 @@ release
 .DS_Store
 .vite
 .env.local
+
+# Internal dev handoff docs (not for public repo)
+HANDOFF_FOR_CODEX.md
