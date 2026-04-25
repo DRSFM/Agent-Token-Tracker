@@ -1,7 +1,7 @@
 {
   "name": "agent-token-tracker",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "本地 Agent Token 计数器 — 估算 Claude Code / Codex 等本地 CLI 工具的 token 消耗",
   "author": "Token Dashboard Contributors",
   "main": "dist-electron/main.js",

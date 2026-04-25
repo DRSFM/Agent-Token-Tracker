@@ -1,6 +1,4 @@
 import { create } from 'zustand'
-import tifa2bWeddingBackground from '@/assets/backgrounds/tifa-2b-wedding-4k.png'
-import tifaWeddingBackground from '@/assets/backgrounds/tifa-wedding-4k.png'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type IdleTimeoutPreset = '30' | '60' | '300' | '900' | '3600' | 'never' | 'custom'
@@ -37,23 +35,37 @@ interface SettingsState {
 }
 
 const STORAGE_KEY = 'token-dashboard.settings'
-const BUILTIN_BACKGROUND_IDS = new Set(['builtin-tifa-2b-wedding', 'builtin-tifa-wedding'])
-const BUILTIN_BACKGROUND_IMAGES: BackgroundImageItem[] = [
-  {
-    id: 'builtin-tifa-2b-wedding',
-    name: '蒂法 2B 花嫁 4K',
-    dataUrl: tifa2bWeddingBackground,
-    createdAt: '2026-04-24T00:00:00.000Z',
+const formalBackgroundModules = import.meta.glob(
+  '../../背景示例图（正式版）/**/*.{png,jpg,jpeg,webp,avif}',
+  { eager: true, import: 'default', query: '?url' },
+) as Record<string, string>
+
+const formatBuiltinBackgroundName = (pathName: string) => {
+  const fileName = pathName.split('/').pop()?.replace(/\.[^.]+$/, '') ?? '内置背景'
+  return fileName
+    .replace(/^\d+[_\s-]*/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+}
+
+const stableHash = (value: string) => {
+  let hash = 5381
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 33) ^ value.charCodeAt(index)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+const BUILTIN_BACKGROUND_IMAGES: BackgroundImageItem[] = Object.entries(formalBackgroundModules)
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([pathName, dataUrl]) => ({
+    id: `builtin-formal-${stableHash(pathName)}`,
+    name: formatBuiltinBackgroundName(pathName),
+    dataUrl,
+    createdAt: '2026-04-25T00:00:00.000Z',
     builtin: true,
-  },
-  {
-    id: 'builtin-tifa-wedding',
-    name: '蒂法花嫁 4K',
-    dataUrl: tifaWeddingBackground,
-    createdAt: '2026-04-24T00:00:00.000Z',
-    builtin: true,
-  },
-]
+  }))
+const BUILTIN_BACKGROUND_IDS = new Set(BUILTIN_BACKGROUND_IMAGES.map((image) => image.id))
 
 interface PersistedSettings {
   theme: ThemeMode

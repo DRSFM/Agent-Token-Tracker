@@ -236,6 +236,28 @@ export default function SettingsPage() {
             </div>
             {backgroundImages.length > 0 && (
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div
+                  className={cn(
+                    'group relative aspect-video rounded-xl overflow-hidden border transition bg-slate-50 dark:bg-slate-800',
+                    !activeBackgroundId
+                      ? 'border-brand-500 ring-2 ring-brand-500/25'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => selectBackgroundImage(null)}
+                    className="flex h-full w-full items-center justify-center text-sm text-slate-500 dark:text-slate-400"
+                    title="无背景"
+                  >
+                    无背景
+                    {!activeBackgroundId && (
+                      <span className="absolute top-2 left-2 w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center shadow-sm">
+                        <Check className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+                  </button>
+                </div>
                 {backgroundImages.map((image) => {
                   const active = image.id === activeBackgroundId
                   return (

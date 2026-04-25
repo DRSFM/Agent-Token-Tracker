@@ -17,8 +17,10 @@ if (Test-Path $backgroundDir) {
 }
 
 New-Item -ItemType Directory -Force -Path $backgroundDir | Out-Null
-Copy-Item -LiteralPath (Join-Path $root "src\assets\backgrounds\tifa-2b-wedding-4k.png") -Destination (Join-Path $backgroundDir "蒂法2B花嫁4k.png") -Force
-Copy-Item -LiteralPath (Join-Path $root "src\assets\backgrounds\tifa-wedding-4k.png") -Destination (Join-Path $backgroundDir "蒂法花嫁4k.png") -Force
+$surpriseBackgroundDir = Join-Path $root "示例背景图"
+if (Test-Path $surpriseBackgroundDir) {
+  Copy-Item -Path (Join-Path $surpriseBackgroundDir "*") -Destination $backgroundDir -Force
+}
 
 if (Test-Path $bundlePath) {
   Remove-Item -LiteralPath $bundlePath -Force
