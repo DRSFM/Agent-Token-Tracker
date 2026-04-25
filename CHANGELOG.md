@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-04-26
+
+### Fixed
+- 应用图标升到 1024x1024，让 macOS dmg 构建能通过 electron-builder 的 512 最低尺寸校验
+- `package.json` 补 `repository` / `homepage` / `bugs` / `keywords` 字段，npm 发布带 `--provenance` 时校验通过
+
+### Note
+- npm 1.1.4 已在 registry 但当时 macOS dmg 构建失败、GitHub Release 未生成；1.1.5 是第一个三平台 + npm 全部齐整的版本
+
 ## [1.1.4] - 2026-04-25
 
 ### Removed

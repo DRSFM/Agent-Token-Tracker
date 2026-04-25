@@ -1,6 +1,6 @@
 {
   "name": "agent-token-tracker",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "本地 Agent Token 计数器 — 估算 Claude Code / Codex 等本地 CLI 工具的 token 消耗",
   "author": "Token Dashboard Contributors",
   "license": "MIT",
