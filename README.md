@@ -18,6 +18,22 @@ npm run dev          # 启动 Vite + Electron 开发模式
 npm run electron:build  # 打包桌面应用
 ```
 
+## npm 安装
+
+```bash
+npm install -g agent-token-tracker
+agent-token-tracker
+```
+
+也可以直接安装本地打出的 tarball：
+
+```bash
+npm install -g ./agent-token-tracker-*.tgz
+agent-token-tracker
+```
+
+npm 版本适合命令行用户；普通桌面用户仍建议使用 GitHub Releases 里的安装包或 dmg。
+
 首次启动若不在 Electron 中（纯浏览器访问 `http://localhost:5173`），前端会自动落到 `src/lib/mock.ts` 的 mock 数据。
 
 ## 目录结构
