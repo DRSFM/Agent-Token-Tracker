@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Database, Activity, TrendingUp, Users } from 'lucide-react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
@@ -14,6 +15,7 @@ import type { DateRange, RankBy } from '@/types/api'
 import { ChevronDown } from 'lucide-react'
 
 export default function OverviewPage() {
+  const navigate = useNavigate()
   const [trendDays, setTrendDays] = useState(14)
   const [donutBy, setDonutBy] = useState<RankBy>('tokens')
   const [rankBy, setRankBy] = useState<RankBy>('tokens')
@@ -42,7 +44,7 @@ export default function OverviewPage() {
         </div>
         {isMock && (
           <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-            Mock 数据 — 等待 Codex 接入真实数据源
+            未连接到本地数据源 — 显示示例数据
           </span>
         )}
       </div>
@@ -155,7 +157,11 @@ export default function OverviewPage() {
           <CardHeader
             title="最近请求"
             action={
-              <button className="text-xs text-brand-600 dark:text-brand-400 hover:underline">
+              <button
+                type="button"
+                onClick={() => navigate('/sessions')}
+                className="text-xs text-brand-600 dark:text-brand-400 hover:underline"
+              >
                 查看全部
               </button>
             }

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search, X } from 'lucide-react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { RangeSelect } from '@/components/filters/RangeSelect'
@@ -18,12 +19,31 @@ import { LoadingState, EmptyState, ErrorState } from '@/components/ui/states'
 export default function SessionsPage() {
   const [days, setDays] = useState(30)
   const [source, setSource] = useState<SourceFilter>('all')
-  const [search, setSearch] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '')
   const [sortKey, setSortKey] = useState<SessionSortKey>('tokens')
   const [sortDesc, setSortDesc] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const { data, loading, error, refresh } = useAllRequests()
+
+  // 从 TopBar 跳转过来时同步 URL ?q=
+  useEffect(() => {
+    const q = searchParams.get('q') ?? ''
+    if (q !== search) setSearch(q)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  // 用户改本页搜索框时同步回 URL（保留可分享 / 后退）
+  useEffect(() => {
+    const current = searchParams.get('q') ?? ''
+    if (current === search) return
+    const next = new URLSearchParams(searchParams)
+    if (search) next.set('q', search)
+    else next.delete('q')
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
 
   const range = useMemo(() => lastNDays(days), [days])
 
