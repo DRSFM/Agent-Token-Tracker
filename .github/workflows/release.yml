@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build-windows:
@@ -81,6 +82,8 @@ jobs:
   build-npm:
     name: Build npm package
     runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,6 +93,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          registry-url: https://registry.npmjs.org/
 
       - name: Install dependencies
         run: npm ci
@@ -107,6 +111,10 @@ jobs:
         with:
           name: npm-package
           path: agent-token-tracker-*.tgz
+
+      - name: Publish npm package
+        if: startsWith(github.ref, 'refs/tags/') && env.NODE_AUTH_TOKEN != ''
+        run: npm publish --provenance --access public
 
   publish-release:
     name: Publish GitHub Release
