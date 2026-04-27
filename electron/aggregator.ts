@@ -34,11 +34,11 @@ interface ScanState {
 }
 
 interface ScanCacheFile {
-  version: 1
+  version: number
   files: CachedSourceFile[]
 }
 
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 const CACHE_FILE_NAME = 'scan-cache.json'
 
 const emptyState = (): ScanState => ({

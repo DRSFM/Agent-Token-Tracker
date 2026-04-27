@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, X } from 'lucide-react'
+import { ArrowDownWideNarrow, Clock3, Hash, Search, X } from 'lucide-react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { RangeSelect } from '@/components/filters/RangeSelect'
 import { SourceTabs, type SourceFilter } from '@/components/filters/SourceTabs'
@@ -15,6 +15,13 @@ import {
 } from '@/lib/aggregations'
 import { formatNumber } from '@/lib/format'
 import { LoadingState, EmptyState, ErrorState } from '@/components/ui/states'
+import { cn } from '@/lib/utils'
+
+const SORT_OPTIONS = [
+  { key: 'tokens', label: 'Tokens', icon: ArrowDownWideNarrow },
+  { key: 'requests', label: '请求', icon: Hash },
+  { key: 'lastActive', label: '最近', icon: Clock3 },
+] satisfies { key: SessionSortKey; label: string; icon: typeof ArrowDownWideNarrow }[]
 
 export default function SessionsPage() {
   const [days, setDays] = useState(30)
@@ -91,6 +98,11 @@ export default function SessionsPage() {
     }
   }
 
+  const handleSortSelect = (k: SessionSortKey) => {
+    setSortKey(k)
+    setSortDesc(true)
+  }
+
   return (
     <div className="space-y-5 pt-2">
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -120,22 +132,45 @@ export default function SessionsPage() {
           <CardHeader
             title="会话列表"
             action={
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="搜索标题 / 模型 / ID"
-                  className="h-8 pl-8 pr-7 w-56 rounded-lg text-xs bg-slate-100/80 dark:bg-slate-800/70 border border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500/40 placeholder:text-slate-400"
-                />
-                {search && (
-                  <button
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    onClick={() => setSearch('')}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="inline-flex h-8 items-center rounded-lg bg-slate-100/80 dark:bg-slate-800/70 p-0.5">
+                  {SORT_OPTIONS.map(({ key, label, icon: Icon }) => {
+                    const active = sortKey === key
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => handleSortSelect(key)}
+                        className={cn(
+                          'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs transition',
+                          active
+                            ? 'bg-white text-brand-600 shadow-sm dark:bg-slate-900 dark:text-brand-300'
+                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        <span>{label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="搜索标题 / 模型 / ID"
+                    className="h-8 pl-8 pr-7 w-56 rounded-lg text-xs bg-slate-100/80 dark:bg-slate-800/70 border border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500/40 placeholder:text-slate-400"
+                  />
+                  {search && (
+                    <button
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      onClick={() => setSearch('')}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
             }
           />

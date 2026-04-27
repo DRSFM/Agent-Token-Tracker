@@ -138,6 +138,29 @@ export function asString(value: unknown) {
   return typeof value === 'string' ? value : undefined
 }
 
+export function asNonEmptyString(value: unknown) {
+  const text = asString(value)?.trim()
+  return text || undefined
+}
+
+function nestedValue(root: unknown, pathSegments: string[]) {
+  let current: unknown = root
+  for (const segment of pathSegments) {
+    const record = asRecord(current)
+    if (!record) return undefined
+    current = record[segment]
+  }
+  return current
+}
+
+export function firstNonEmptyStringAtPaths(root: unknown, paths: string[][]) {
+  for (const candidatePath of paths) {
+    const text = asNonEmptyString(nestedValue(root, candidatePath))
+    if (text) return text
+  }
+  return undefined
+}
+
 export function normalizeIso(value: unknown) {
   if (typeof value !== 'string') return new Date().toISOString()
   const date = new Date(value)

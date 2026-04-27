@@ -51,6 +51,41 @@ test('scanClaudeCode weights cache tokens at 0.1x and skips malformed rows', asy
   }
 })
 
+test('scanClaudeCode reads third-party model names from fallback fields', async () => {
+  const root = await tempRoot('agent-token-claude-third-party')
+  try {
+    const filePath = path.join(root, 'project-a', 'session-third-party.jsonl')
+    await writeJsonl(filePath, [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-04-24T01:00:00.000Z',
+        sessionId: 'session-third-party',
+        cwd: '/tmp/project-a',
+        request: {
+          body: {
+            model: 'minimax-2.7',
+          },
+        },
+        message: {
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        },
+      }),
+    ])
+
+    const result = await scanClaudeCode(new Map(), root)
+    assert.equal(result.records.length, 1)
+    assert.equal(result.records[0].model, 'minimax-2.7')
+    assert.equal(result.records[0].totalTokens, 150)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test('scanCodex uses last_token_usage total tokens and ignores cumulative totals', async () => {
   const root = await tempRoot('agent-token-codex')
   try {
@@ -134,4 +169,3 @@ test('scanners reuse unchanged file cache entries', async () => {
     await fs.rm(root, { recursive: true, force: true })
   }
 })
-

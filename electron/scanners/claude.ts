@@ -6,6 +6,7 @@ import {
   asRecord,
   asString,
   cacheKey,
+  firstNonEmptyStringAtPaths,
   getJsonlFileMetadata,
   listJsonlFiles,
   normalizeIso,
@@ -17,6 +18,24 @@ import {
   type CachedSourceFile,
   type SourceScanResult,
 } from './shared'
+
+const CLAUDE_MODEL_PATHS = [
+  ['message', 'model'],
+  ['model'],
+  ['modelName'],
+  ['modelId'],
+  ['request', 'model'],
+  ['request', 'body', 'model'],
+  ['request', 'json', 'model'],
+  ['response', 'model'],
+  ['response', 'body', 'model'],
+  ['message', 'metadata', 'model'],
+  ['message', 'metadata', 'model_name'],
+  ['message', 'metadata', 'modelName'],
+  ['message', 'metadata', 'modelId'],
+  ['message', 'usage', 'model'],
+  ['message', 'usage', 'model_name'],
+]
 
 export function claudeCodeRoot() {
   return path.join(os.homedir(), '.claude', 'projects')
@@ -73,7 +92,7 @@ export async function scanClaudeCode(
             source: 'claude-code',
             sessionId,
             sessionTitle,
-            model: asString(message.model) ?? 'claude-unknown',
+            model: firstNonEmptyStringAtPaths(row, CLAUDE_MODEL_PATHS) ?? 'claude-unknown',
             inputTokens,
             outputTokens,
             cacheReadTokens,
