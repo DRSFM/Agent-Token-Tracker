@@ -53,12 +53,14 @@ export default function SessionsPage() {
   }, [search])
 
   const range = useMemo(() => lastNDays(days), [days])
+  const visibleRecords = useMemo(() => {
+    if (!data) return []
+    const ranged = data.filter((r) => inRange(r, range))
+    return source === 'all' ? ranged : ranged.filter((r) => r.source === source)
+  }, [data, range, source])
 
   const sessions = useMemo<SessionAggregate[]>(() => {
-    if (!data) return []
-    const filteredRecords = data.filter((r) => inRange(r, range))
-    let aggs = aggregateSessions(filteredRecords)
-    if (source !== 'all') aggs = aggs.filter((s) => s.source === source)
+    let aggs = aggregateSessions(visibleRecords)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       aggs = aggs.filter(
@@ -75,7 +77,7 @@ export default function SessionsPage() {
       return dir * (new Date(a.lastActiveAt).getTime() - new Date(b.lastActiveAt).getTime())
     })
     return aggs
-  }, [data, range, source, search, sortKey, sortDesc])
+  }, [visibleRecords, search, sortKey, sortDesc])
 
   const summary = useMemo(() => {
     const totalTokens = sessions.reduce((s, x) => s + x.totalTokens, 0)
@@ -200,7 +202,7 @@ export default function SessionsPage() {
         <Card>
           <CardHeader title="会话详情" />
           <CardBody>
-            <SessionDetail session={selected} records={data ?? []} />
+            <SessionDetail session={selected} records={visibleRecords} />
           </CardBody>
         </Card>
       </div>

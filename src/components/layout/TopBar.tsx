@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 const titleMap: Record<string, string> = {
   '/overview': 'Token Dashboard',
   '/sessions': '会话',
+  '/replay': '回放',
   '/models': '模型',
   '/trends': '趋势',
   '/settings': '设置',

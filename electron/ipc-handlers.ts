@@ -4,6 +4,7 @@ import type {
   AgentSource,
   DateRange,
   RankBy,
+  ReplaySessionOptions,
 } from '../src/types/api'
 import { tokenDataStore } from './aggregator'
 import { claudeCodeRoot } from './scanners/claude'
@@ -16,6 +17,7 @@ import {
   syncRemoteLogs,
   testRemoteConnection,
 } from './remote-sync'
+import { getReplaySession } from './replay'
 import {
   checkForUpdates,
   downloadUpdate,
@@ -101,6 +103,16 @@ export function registerIpcHandlers() {
       broadcastDataChanged()
     }
     return result
+  })
+
+  ipcMain.handle('token:getReplaySession', async (
+    _e,
+    sessionId: string,
+    source?: AgentSource,
+    options?: ReplaySessionOptions,
+  ) => {
+    const files = await tokenDataStore.getReplayFilesForSession(sessionId, source)
+    return getReplaySession(sessionId, source, files, options)
   })
 
   ipcMain.handle('token:getUpdateSettings', async () => getUpdateSettings())

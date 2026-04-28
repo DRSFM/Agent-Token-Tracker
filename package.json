@@ -1,6 +1,6 @@
 {
   "name": "agent-token-tracker",
-  "version": "1.1.9",
+  "version": "1.2.0",
   "description": "本地 Agent Token 计数器 — 估算 Claude Code / Codex 等本地 CLI 工具的 token 消耗",
   "author": "Token Dashboard Contributors",
   "license": "MIT",
@@ -57,6 +57,7 @@
     "echarts": "^5.5.1",
     "echarts-for-react": "^3.0.2",
     "electron-updater": "^6.8.3",
+    "katex": "^0.16.45",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -65,6 +66,7 @@
     "zustand": "^5.0.1"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

@@ -170,6 +170,60 @@ export interface RemoteSyncStatus {
   codexCachePath: string
 }
 
+export type ReplayEventRole = 'user' | 'assistant' | 'system' | 'tool' | 'event'
+
+export type ReplayEventType =
+  | 'message'
+  | 'tool_call'
+  | 'tool_result'
+  | 'token_usage'
+  | 'metadata'
+  | 'error'
+
+export interface ReplayAttachment {
+  type: 'image'
+  url: string
+  mimeType?: string
+  title?: string
+}
+
+export interface ReplayEvent {
+  id: string
+  sessionId: string
+  source: AgentSource
+  timestamp: string
+  role: ReplayEventRole
+  type: ReplayEventType
+  content?: string
+  model?: string
+  inputTokens?: number
+  outputTokens?: number
+  cacheTokens?: number
+  totalTokens?: number
+  toolName?: string
+  toolInput?: unknown
+  toolOutput?: unknown
+  attachments?: ReplayAttachment[]
+  raw?: unknown
+  rawRef: {
+    filePath: string
+    lineNumber: number
+  }
+}
+
+export interface ReplaySessionOptions {
+  /** ISO timestamp lower bound, inclusive */
+  from?: string
+  /** ISO timestamp upper bound, inclusive */
+  to?: string
+  /** Include full raw JSONL rows. Keep false for fast conversation rendering. */
+  includeRaw?: boolean
+  /** Return only human-readable user/assistant messages for the replay tab. */
+  conversationOnly?: boolean
+  /** Maximum events returned after sorting/filtering. */
+  limit?: number
+}
+
 /** 时间范围筛选 */
 export type DateRange =
   | { kind: 'last-n-days'; days: number }
@@ -231,6 +285,13 @@ export interface TokenAPI {
 
   /** 同步远程日志到本地缓存并触发重扫 */
   syncRemoteLogs(): Promise<{ ok: boolean; message: string; syncedAt?: string }>
+
+  /** 按需加载某个会话的历史回放事件 */
+  getReplaySession(
+    sessionId: string,
+    source?: AgentSource,
+    options?: ReplaySessionOptions,
+  ): Promise<ReplayEvent[]>
 
   /** 获取更新源配置 */
   getUpdateSettings(): Promise<UpdateProviderSettings>

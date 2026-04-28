@@ -1,0 +1,457 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Clock3, Hash, Maximize2, MessageSquare, Minimize2, Search, X } from 'lucide-react'
+import { RangeSelect } from '@/components/filters/RangeSelect'
+import { SourceTabs, type SourceFilter } from '@/components/filters/SourceTabs'
+import { SourceBadge } from '@/components/filters/SourceBadge'
+import { ConversationEventList } from '@/components/replay/ConversationView'
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
+import { useAllRequests } from '@/hooks/useAllRequests'
+import { aggregateSessions, inRange, lastNDays, type SessionAggregate } from '@/lib/aggregations'
+import { api } from '@/lib/api'
+import { formatNumber, formatRelativeMinutes } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import type { ReplayEvent, ReplaySessionOptions, RequestRecord } from '@/types/api'
+
+const REPLAY_LIMIT = 1200
+const REPLAY_WINDOW_BEFORE_MS = 30 * 60 * 1000
+const REPLAY_WINDOW_AFTER_MS = 5 * 60 * 1000
+
+export default function ReplayPage() {
+  const [days, setDays] = useState(30)
+  const [source, setSource] = useState<SourceFilter>('all')
+  const [sessionQuery, setSessionQuery] = useState('')
+  const [messageQuery, setMessageQuery] = useState('')
+  const [events, setEvents] = useState<ReplayEvent[] | null>(null)
+  const [loadingReplay, setLoadingReplay] = useState(false)
+  const [replayError, setReplayError] = useState<unknown>(null)
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const [focusMode, setFocusMode] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const selectedId = searchParams.get('sid')
+  const { data, loading, error, refresh } = useAllRequests()
+
+  const range = useMemo(() => lastNDays(days), [days])
+  const visibleRecords = useMemo(() => {
+    if (!data) return []
+    const ranged = data.filter((record) => inRange(record, range))
+    return source === 'all' ? ranged : ranged.filter((record) => record.source === source)
+  }, [data, range, source])
+
+  const sessions = useMemo(() => {
+    const q = sessionQuery.trim().toLowerCase()
+    return aggregateSessions(visibleRecords)
+      .filter((session) =>
+        !q ||
+        session.title.toLowerCase().includes(q) ||
+        session.sessionId.toLowerCase().includes(q) ||
+        session.models.some((model) => model.model.toLowerCase().includes(q)))
+      .sort((a, b) => new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime())
+  }, [visibleRecords, sessionQuery])
+
+  const selected = useMemo(() => {
+    if (!sessions.length) return null
+    return sessions.find((session) => session.sessionId === selectedId) ?? sessions[0]
+  }, [sessions, selectedId])
+
+  const selectedRecords = useMemo(
+    () => (selected ? visibleRecords.filter((record) => record.sessionId === selected.sessionId) : []),
+    [selected, visibleRecords],
+  )
+
+  const replayOptions = useMemo<ReplaySessionOptions>(() => ({
+    ...replayWindowFromRequests(selectedRecords),
+    includeRaw: false,
+    conversationOnly: true,
+    limit: REPLAY_LIMIT,
+  }), [selectedRecords])
+  const selectedSessionId = selected?.sessionId
+  const selectedSource = selected?.source
+  const replayFrom = replayOptions.from
+  const replayTo = replayOptions.to
+
+  const replayKey = selected
+    ? [
+      selected.sessionId,
+      selected.source,
+      replayFrom ?? '',
+      replayTo ?? '',
+      REPLAY_LIMIT,
+    ].join('|')
+    : ''
+
+  useEffect(() => {
+    if (!sessions.length || selectedId) return
+    selectSession(sessions[0])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, selectedId])
+
+  useEffect(() => {
+    if (!selectedSessionId || !selectedSource || loadedKey === replayKey) return
+    let cancelled = false
+    setEvents(null)
+    setLoadingReplay(true)
+    setReplayError(null)
+    void api.getReplaySession(selectedSessionId, selectedSource, {
+      from: replayFrom,
+      to: replayTo,
+      includeRaw: false,
+      conversationOnly: true,
+      limit: REPLAY_LIMIT,
+    })
+      .then((nextEvents) => {
+        if (!cancelled) {
+          setEvents(nextEvents)
+          setLoadedKey(replayKey)
+        }
+      })
+      .catch((nextError) => {
+        if (!cancelled) setReplayError(nextError)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingReplay(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loadedKey, replayFrom, replayKey, replayTo, selectedSessionId, selectedSource])
+
+  const filteredEvents = useMemo(() => {
+    if (!events) return []
+    const q = messageQuery.trim().toLowerCase()
+    if (!q) return events
+    return events.filter((event) =>
+      [event.content, event.model, event.role].some((value) => value?.toLowerCase().includes(q)),
+    )
+  }, [events, messageQuery])
+
+  const selectSession = (session: SessionAggregate) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('sid', session.sessionId)
+    next.set('source', session.source)
+    setSearchParams(next, { replace: true })
+  }
+
+  return (
+    <div className="flex h-[calc(100vh-5.5rem)] min-h-[640px] flex-col gap-4 pt-2">
+      {focusMode && selected && (
+        <ReplayFocusOverlay
+          session={selected}
+          events={filteredEvents}
+          loading={loadingReplay}
+          error={replayError}
+          messageQuery={messageQuery}
+          setMessageQuery={setMessageQuery}
+          onClose={() => setFocusMode(false)}
+          onRetry={() => {
+            setLoadedKey(null)
+            setEvents(null)
+          }}
+        />
+      )}
+
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-50">回放</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            像聊天记录一样阅读历史会话，只展示输入与回复
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <SourceTabs value={source} onChange={setSource} />
+          <RangeSelect value={days} onChange={setDays} />
+        </div>
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className="flex min-h-0 flex-col rounded-2xl border border-slate-200/70 bg-white/90 shadow-card backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-card-dark">
+          <div className="border-b border-slate-100 px-4 py-4 dark:border-slate-800">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                value={sessionQuery}
+                onChange={(event) => setSessionQuery(event.target.value)}
+                placeholder="搜索会话 / 模型 / ID"
+                className="h-9 w-full rounded-xl border border-transparent bg-slate-100/80 pl-8 pr-8 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-800/70 dark:text-slate-200"
+              />
+              {sessionQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSessionQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {error ? (
+              <ErrorState error={error} onRetry={refresh} className="py-10" />
+            ) : loading && !data ? (
+              <LoadingState />
+            ) : sessions.length === 0 ? (
+              <EmptyState
+                title={sessionQuery ? '没有匹配的会话' : '当前时间窗内暂无会话'}
+                hint={sessionQuery ? '换个关键词或清空搜索' : '尝试调整时间范围 / 来源筛选'}
+                className="py-10"
+              />
+            ) : (
+              <ul className="space-y-1">
+                {sessions.map((session) => (
+                  <SessionReplayRow
+                    key={session.sessionId}
+                    session={session}
+                    active={session.sessionId === selected?.sessionId}
+                    onClick={() => selectSession(session)}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </aside>
+
+        <section className="flex min-h-0 flex-col rounded-2xl border border-slate-200/70 bg-white/90 shadow-card backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-card-dark">
+          {selected ? (
+            <>
+              <div className="border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-brand-500" />
+                      <h3 className="truncate text-lg font-semibold text-slate-900 dark:text-slate-100">
+                        {selected.title}
+                      </h3>
+                    </div>
+                    <div className="mt-1 truncate font-mono text-xs text-slate-400">
+                      {selected.sessionId}
+                    </div>
+                  </div>
+                  <SourceBadge source={selected.source} />
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <ReplayMetric icon={MessageSquare} label="消息" value={formatNumber(events?.length ?? 0)} />
+                  <ReplayMetric icon={Hash} label="请求" value={formatNumber(selected.requestCount)} />
+                  <ReplayMetric icon={Hash} label="Tokens" value={formatNumber(selected.totalTokens)} />
+                  <ReplayMetric icon={Clock3} label="最近" value={formatRelativeMinutes(selected.lastActiveAt)} />
+                </div>
+
+                <div className="relative mt-4">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={messageQuery}
+                    onChange={(event) => setMessageQuery(event.target.value)}
+                    placeholder="搜索我的输入 / 助手回复"
+                    className="h-10 w-full rounded-xl border border-transparent bg-slate-100/80 pl-10 pr-24 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-800/70 dark:text-slate-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFocusMode(true)}
+                    disabled={!selected || loadingReplay || !!replayError || (events?.length ?? 0) === 0}
+                    className="absolute right-1.5 top-1/2 inline-flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-lg bg-white px-2.5 text-xs font-medium text-brand-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-900 dark:text-brand-300 dark:ring-slate-700"
+                    title="进入沉浸回放"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" />
+                    全屏
+                  </button>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 px-4 py-5 md:px-8">
+                {replayError ? (
+                  <ErrorState
+                    error={replayError}
+                    onRetry={() => {
+                      setLoadedKey(null)
+                      setEvents(null)
+                    }}
+                    className="py-16"
+                  />
+                ) : loadingReplay ? (
+                  <LoadingState label="正在整理对话回放…" />
+                ) : (events?.length ?? 0) === 0 ? (
+                  <EmptyState
+                    title="没有可回放的对话"
+                    hint="这段日志可能只包含统计记录、工具调用，或该来源未暴露正文"
+                    className="py-16"
+                  />
+                ) : filteredEvents.length === 0 ? (
+                  <EmptyState title="没有匹配消息" hint="换个关键词或清空搜索" className="py-16" />
+                ) : (
+                  <ConversationEventList
+                    events={filteredEvents}
+                    className="h-full space-y-6"
+                    compact={false}
+                  />
+                )}
+              </div>
+            </>
+          ) : (
+            <EmptyState
+              title="选择会话开始回放"
+              hint="左侧选择任意历史会话，这里会以聊天记录形式展示输入和回复"
+              className="py-24"
+            />
+          )}
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function ReplayFocusOverlay({
+  session,
+  events,
+  loading,
+  error,
+  messageQuery,
+  setMessageQuery,
+  onClose,
+  onRetry,
+}: {
+  session: SessionAggregate
+  events: ReplayEvent[]
+  loading: boolean
+  error: unknown
+  messageQuery: string
+  setMessageQuery: (value: string) => void
+  onClose: () => void
+  onRetry: () => void
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-50/95 p-5 backdrop-blur-xl dark:bg-slate-950/95">
+      <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-brand-500" />
+            <h2 className="truncate text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {session.title}
+            </h2>
+            <SourceBadge source={session.source} />
+          </div>
+          <div className="mt-1 truncate font-mono text-xs text-slate-400">
+            {session.sessionId}
+          </div>
+        </div>
+
+        <div className="flex min-w-[320px] max-w-xl flex-1 items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={messageQuery}
+              onChange={(event) => setMessageQuery(event.target.value)}
+              placeholder="搜索我的输入 / 助手回复"
+              className="h-10 w-full rounded-xl border border-slate-200/70 bg-white/85 pl-10 pr-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:text-brand-600 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700"
+            title="退出沉浸回放（Esc）"
+          >
+            <Minimize2 className="h-4 w-4" />
+            退出
+          </button>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-5 shadow-card dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-card-dark md:px-12">
+        {error ? (
+          <ErrorState error={error} onRetry={onRetry} className="py-24" />
+        ) : loading ? (
+          <LoadingState label="正在整理对话回放…" />
+        ) : events.length === 0 ? (
+          <EmptyState title="没有可回放的对话" hint="这段日志可能只包含统计记录、工具调用，或该来源未暴露正文" className="py-24" />
+        ) : (
+          <ConversationEventList
+            events={events}
+            className="mx-auto h-full max-w-5xl space-y-6"
+            compact={false}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SessionReplayRow({
+  session,
+  active,
+  onClick,
+}: {
+  session: SessionAggregate
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          'w-full rounded-xl px-3 py-3 text-left transition',
+          active
+            ? 'bg-brand-500/10 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+            : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/50',
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{session.title}</div>
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
+              <span>{formatNumber(session.requestCount)} 请求</span>
+              <span>{formatRelativeMinutes(session.lastActiveAt)}</span>
+            </div>
+          </div>
+          <SourceBadge source={session.source} />
+        </div>
+      </button>
+    </li>
+  )
+}
+
+function ReplayMetric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof MessageSquare
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+      <div className="flex items-center gap-1.5 text-xs text-slate-400">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <div className="mt-1 truncate text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function replayWindowFromRequests(records: RequestRecord[]): Pick<ReplaySessionOptions, 'from' | 'to'> {
+  if (!records.length) return {}
+  const times = records
+    .map((record) => new Date(record.timestamp).getTime())
+    .filter(Number.isFinite)
+  if (!times.length) return {}
+  return {
+    from: new Date(Math.min(...times) - REPLAY_WINDOW_BEFORE_MS).toISOString(),
+    to: new Date(Math.max(...times) + REPLAY_WINDOW_AFTER_MS).toISOString(),
+  }
+}

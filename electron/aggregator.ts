@@ -419,6 +419,20 @@ export class TokenDataStore {
     return records.slice(0, Math.max(0, limit))
   }
 
+  async getReplayFilesForSession(sessionId: string, source?: RequestRecord['source']) {
+    const { records } = await this.ensureScanned()
+    const files = new Set<string>()
+
+    for (const record of records) {
+      if (record.sessionId !== sessionId) continue
+      if (source && source !== 'unknown' && record.source !== source) continue
+      const filePath = filePathFromRecordId(record.id, record.source)
+      if (filePath) files.add(filePath)
+    }
+
+    return [...files]
+  }
+
   async getDataSourceStatus(): Promise<DataSourceStatus> {
     const state = await this.ensureScanned()
     return {
@@ -436,6 +450,15 @@ export class TokenDataStore {
 }
 
 export const tokenDataStore = new TokenDataStore()
+
+function filePathFromRecordId(id: string, source: RequestRecord['source']) {
+  const prefix = `${source}:`
+  if (!id.startsWith(prefix)) return undefined
+  const rest = id.slice(prefix.length)
+  const lineSeparator = rest.lastIndexOf(':')
+  if (lineSeparator <= 0) return undefined
+  return rest.slice(0, lineSeparator)
+}
 
 function sourceStatusFromScanResult(result: SourceScanResult): DataSourceStatus['sources'][number] {
   return {

@@ -23,6 +23,8 @@ const api: TokenAPI = {
   getRemoteSyncStatus: () => ipcRenderer.invoke('token:getRemoteSyncStatus'),
   testRemoteConnection: () => ipcRenderer.invoke('token:testRemoteConnection'),
   syncRemoteLogs: () => ipcRenderer.invoke('token:syncRemoteLogs'),
+  getReplaySession: (sessionId, source, options) =>
+    ipcRenderer.invoke('token:getReplaySession', sessionId, source, options),
   getUpdateSettings: () => ipcRenderer.invoke('token:getUpdateSettings'),
   setUpdateSettings: (settings) => ipcRenderer.invoke('token:setUpdateSettings', settings),
   getUpdateStatus: () => ipcRenderer.invoke('token:getUpdateStatus'),

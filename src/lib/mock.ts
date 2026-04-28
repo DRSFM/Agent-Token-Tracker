@@ -268,6 +268,33 @@ export const mockAPI: TokenAPI = {
   async syncRemoteLogs() {
     return { ok: false, message: 'Mock 环境不可同步 SSH。' }
   },
+  async getReplaySession(sessionId) {
+    return [
+      {
+        id: `mock:${sessionId}:1`,
+        sessionId,
+        source: 'claude-code',
+        timestamp: new Date().toISOString(),
+        role: 'user',
+        type: 'message',
+        content: '帮我检查这个会话的 token 消耗。',
+        raw: { type: 'user' },
+        rawRef: { filePath: 'mock.jsonl', lineNumber: 1 },
+      },
+      {
+        id: `mock:${sessionId}:2`,
+        sessionId,
+        source: 'claude-code',
+        timestamp: new Date().toISOString(),
+        role: 'assistant',
+        type: 'message',
+        content: '这里是一段开发期 mock 回放内容，真实安装版会读取本地 JSONL。',
+        model: 'claude-opus-4-7',
+        raw: { type: 'assistant' },
+        rawRef: { filePath: 'mock.jsonl', lineNumber: 2 },
+      },
+    ]
+  },
   async getUpdateSettings() {
     return { provider: 'none' }
   },
