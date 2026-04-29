@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Clock3, Hash, Maximize2, MessageSquare, Minimize2, Search, X } from 'lucide-react'
+import { Clock3, GripVertical, Hash, Maximize2, MessageSquare, Minimize2, Search, X } from 'lucide-react'
 import { RangeSelect } from '@/components/filters/RangeSelect'
 import { SourceTabs, type SourceFilter } from '@/components/filters/SourceTabs'
 import { SourceBadge } from '@/components/filters/SourceBadge'
@@ -16,6 +16,19 @@ import type { ReplayEvent, ReplaySessionOptions, RequestRecord } from '@/types/a
 const REPLAY_LIMIT = 1200
 const REPLAY_WINDOW_BEFORE_MS = 30 * 60 * 1000
 const REPLAY_WINDOW_AFTER_MS = 5 * 60 * 1000
+
+const FOCUS_WIDTH_KEY = 'replay.focus.width'
+const FOCUS_WIDTH_DEFAULT = 1024
+const FOCUS_WIDTH_MIN = 480
+
+const FOCUS_FONT_KEY = 'replay.focus.fontSize'
+const FOCUS_FONT_DEFAULT = 15
+const FOCUS_FONT_OPTIONS: { label: string; px: number }[] = [
+  { label: '小', px: 13 },
+  { label: '中', px: 15 },
+  { label: '大', px: 17 },
+  { label: '特大', px: 19 },
+]
 
 export default function ReplayPage() {
   const [days, setDays] = useState(30)
@@ -329,6 +342,61 @@ function ReplayFocusOverlay({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const [widthPx, setWidthPx] = useState<number>(() => {
+    if (typeof window === 'undefined') return FOCUS_WIDTH_DEFAULT
+    const saved = Number(window.localStorage.getItem(FOCUS_WIDTH_KEY))
+    return Number.isFinite(saved) && saved >= FOCUS_WIDTH_MIN ? saved : FOCUS_WIDTH_DEFAULT
+  })
+  const [fontPx, setFontPx] = useState<number>(() => {
+    if (typeof window === 'undefined') return FOCUS_FONT_DEFAULT
+    const saved = Number(window.localStorage.getItem(FOCUS_FONT_KEY))
+    return FOCUS_FONT_OPTIONS.some((option) => option.px === saved) ? saved : FOCUS_FONT_DEFAULT
+  })
+  const [maxWidthPx, setMaxWidthPx] = useState<number>(typeof window === 'undefined' ? 1920 : window.innerWidth)
+  const stageRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(FOCUS_WIDTH_KEY, String(Math.round(widthPx)))
+  }, [widthPx])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(FOCUS_FONT_KEY, String(fontPx))
+  }, [fontPx])
+
+  useEffect(() => {
+    const measure = () => {
+      if (stageRef.current) setMaxWidthPx(stageRef.current.clientWidth)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+
+  const startDrag = (event: React.MouseEvent, side: 'left' | 'right') => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = widthPx
+    const sign = side === 'right' ? 1 : -1
+    const max = stageRef.current?.clientWidth ?? window.innerWidth
+    const onMove = (e: MouseEvent) => {
+      const delta = (e.clientX - startX) * 2 * sign
+      const next = Math.min(max, Math.max(FOCUS_WIDTH_MIN, startWidth + delta))
+      setWidthPx(next)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'ew-resize'
+    document.body.style.userSelect = 'none'
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-50/95 p-5 backdrop-blur-xl dark:bg-slate-950/95">
       <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
@@ -345,7 +413,7 @@ function ReplayFocusOverlay({
           </div>
         </div>
 
-        <div className="flex min-w-[320px] max-w-xl flex-1 items-center gap-2">
+        <div className="flex min-w-[320px] max-w-2xl flex-1 items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -354,6 +422,46 @@ function ReplayFocusOverlay({
               placeholder="搜索我的输入 / 助手回复"
               className="h-10 w-full rounded-xl border border-slate-200/70 bg-white/85 pl-10 pr-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200"
             />
+          </div>
+          <div
+            className="hidden h-10 shrink-0 items-center gap-1 rounded-xl bg-white px-2 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700 lg:flex"
+            title="切换对话字号"
+          >
+            <span className="px-1 text-xs text-slate-500 dark:text-slate-400">字号</span>
+            {FOCUS_FONT_OPTIONS.map((option) => (
+              <button
+                key={option.px}
+                type="button"
+                onClick={() => setFontPx(option.px)}
+                className={cn(
+                  'inline-flex h-7 min-w-[28px] items-center justify-center rounded-md px-2 text-xs font-medium transition',
+                  fontPx === option.px
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                )}
+                title={`${option.label}（${option.px}px）`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div
+            className="hidden h-10 shrink-0 items-center gap-2 rounded-xl bg-white px-3 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700 md:flex"
+            title="拖动调整对话宽度"
+          >
+            <span className="text-xs text-slate-500 dark:text-slate-400">宽度</span>
+            <input
+              type="range"
+              min={FOCUS_WIDTH_MIN}
+              max={Math.max(FOCUS_WIDTH_MIN + 1, Math.round(maxWidthPx))}
+              step={20}
+              value={Math.min(Math.round(widthPx), Math.round(maxWidthPx))}
+              onChange={(event) => setWidthPx(Number(event.target.value))}
+              className="h-1.5 w-32 cursor-pointer appearance-none rounded-full bg-slate-200 accent-brand-500 dark:bg-slate-700"
+            />
+            <span className="w-10 text-right font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
+              {Math.round(widthPx)}
+            </span>
           </div>
           <button
             type="button"
@@ -367,7 +475,10 @@ function ReplayFocusOverlay({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-5 shadow-card dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-card-dark md:px-12">
+      <div
+        ref={stageRef}
+        className="relative min-h-0 flex-1 rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-5 shadow-card dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-card-dark md:px-6"
+      >
         {error ? (
           <ErrorState error={error} onRetry={onRetry} className="py-24" />
         ) : loading ? (
@@ -375,11 +486,37 @@ function ReplayFocusOverlay({
         ) : events.length === 0 ? (
           <EmptyState title="没有可回放的对话" hint="这段日志可能只包含统计记录、工具调用，或该来源未暴露正文" className="py-24" />
         ) : (
-          <ConversationEventList
-            events={events}
-            className="mx-auto h-full max-w-5xl space-y-6"
-            compact={false}
-          />
+          <div
+            className="relative mx-auto h-full"
+            style={{ width: `min(${Math.round(widthPx)}px, 100%)` }}
+          >
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="拖拽调整对话宽度"
+              onMouseDown={(event) => startDrag(event, 'left')}
+              className="group absolute left-0 top-1/2 z-20 flex h-20 w-5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full bg-white shadow-md ring-1 ring-slate-300 transition hover:bg-brand-500 hover:ring-brand-500 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-brand-500 dark:hover:ring-brand-500"
+              title="拖拽调整对话宽度"
+            >
+              <GripVertical className="h-4 w-4 text-slate-500 transition group-hover:text-white dark:text-slate-300" />
+            </div>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="拖拽调整对话宽度"
+              onMouseDown={(event) => startDrag(event, 'right')}
+              className="group absolute right-0 top-1/2 z-20 flex h-20 w-5 translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full bg-white shadow-md ring-1 ring-slate-300 transition hover:bg-brand-500 hover:ring-brand-500 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-brand-500 dark:hover:ring-brand-500"
+              title="拖拽调整对话宽度"
+            >
+              <GripVertical className="h-4 w-4 text-slate-500 transition group-hover:text-white dark:text-slate-300" />
+            </div>
+            <ConversationEventList
+              events={events}
+              className="h-full space-y-6"
+              compact={false}
+              fontSize={fontPx}
+            />
+          </div>
         )}
       </div>
     </div>

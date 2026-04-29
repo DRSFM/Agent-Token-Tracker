@@ -13,10 +13,12 @@ export function ConversationEventList({
   events,
   className,
   compact = true,
+  fontSize,
 }: {
   events: ReplayEvent[]
   className?: string
   compact?: boolean
+  fontSize?: number
 }) {
   return (
     <ul className={cn('space-y-4 overflow-y-auto pr-1', className)}>
@@ -25,20 +27,29 @@ export function ConversationEventList({
           key={event.id}
           className={cn('flex', event.role === 'user' ? 'justify-end' : 'justify-start')}
         >
-          <MessageBubble event={event} compact={compact} />
+          <MessageBubble event={event} compact={compact} fontSize={fontSize} />
         </li>
       ))}
     </ul>
   )
 }
 
-export function MessageBubble({ event, compact = false }: { event: ReplayEvent; compact?: boolean }) {
+export function MessageBubble({
+  event,
+  compact = false,
+  fontSize,
+}: {
+  event: ReplayEvent
+  compact?: boolean
+  fontSize?: number
+}) {
   const isUser = event.role === 'user'
   return (
     <article
+      style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
       className={cn(
         'max-w-[92%] rounded-2xl px-4 py-3 shadow-sm ring-1',
-        compact ? 'text-sm' : 'text-[15px]',
+        !fontSize && (compact ? 'text-sm' : 'text-[15px]'),
         isUser
           ? 'rounded-tr-md bg-slate-100 text-slate-800 ring-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700'
           : 'rounded-tl-md bg-white/85 text-slate-800 ring-slate-200 dark:bg-slate-900/85 dark:text-slate-100 dark:ring-slate-700',
