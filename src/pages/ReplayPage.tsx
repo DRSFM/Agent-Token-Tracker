@@ -30,6 +30,25 @@ const FOCUS_FONT_OPTIONS: { label: string; px: number }[] = [
   { label: '特大', px: 19 },
 ]
 
+const FOCUS_FAMILY_CN_KEY = 'replay.focus.fontFamilyZh'
+const FOCUS_FAMILY_EN_KEY = 'replay.focus.fontFamilyEn'
+const FOCUS_FAMILY_CN_OPTIONS: { label: string; stack: string }[] = [
+  { label: '宋体', stack: '"SimSun", "宋体"' },
+  { label: '微软雅黑', stack: '"Microsoft YaHei", "微软雅黑"' },
+  { label: '黑体', stack: '"SimHei", "黑体"' },
+  { label: '楷体', stack: '"KaiTi", "楷体"' },
+  { label: '仿宋', stack: '"FangSong", "仿宋"' },
+]
+const FOCUS_FAMILY_EN_OPTIONS: { label: string; stack: string }[] = [
+  { label: 'Times New Roman', stack: '"Times New Roman", Times' },
+  { label: 'Arial', stack: 'Arial, Helvetica' },
+  { label: 'Helvetica', stack: 'Helvetica, Arial' },
+  { label: 'Georgia', stack: 'Georgia, serif' },
+  { label: 'Courier New', stack: '"Courier New", monospace' },
+]
+const FOCUS_FAMILY_CN_DEFAULT = FOCUS_FAMILY_CN_OPTIONS[0].label
+const FOCUS_FAMILY_EN_DEFAULT = FOCUS_FAMILY_EN_OPTIONS[0].label
+
 export default function ReplayPage() {
   const [days, setDays] = useState(30)
   const [source, setSource] = useState<SourceFilter>('all')
@@ -352,6 +371,16 @@ function ReplayFocusOverlay({
     const saved = Number(window.localStorage.getItem(FOCUS_FONT_KEY))
     return FOCUS_FONT_OPTIONS.some((option) => option.px === saved) ? saved : FOCUS_FONT_DEFAULT
   })
+  const [familyCn, setFamilyCn] = useState<string>(() => {
+    if (typeof window === 'undefined') return FOCUS_FAMILY_CN_DEFAULT
+    const saved = window.localStorage.getItem(FOCUS_FAMILY_CN_KEY) ?? ''
+    return FOCUS_FAMILY_CN_OPTIONS.some((option) => option.label === saved) ? saved : FOCUS_FAMILY_CN_DEFAULT
+  })
+  const [familyEn, setFamilyEn] = useState<string>(() => {
+    if (typeof window === 'undefined') return FOCUS_FAMILY_EN_DEFAULT
+    const saved = window.localStorage.getItem(FOCUS_FAMILY_EN_KEY) ?? ''
+    return FOCUS_FAMILY_EN_OPTIONS.some((option) => option.label === saved) ? saved : FOCUS_FAMILY_EN_DEFAULT
+  })
   const [maxWidthPx, setMaxWidthPx] = useState<number>(typeof window === 'undefined' ? 1920 : window.innerWidth)
   const stageRef = useRef<HTMLDivElement>(null)
 
@@ -364,6 +393,22 @@ function ReplayFocusOverlay({
     if (typeof window === 'undefined') return
     window.localStorage.setItem(FOCUS_FONT_KEY, String(fontPx))
   }, [fontPx])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(FOCUS_FAMILY_CN_KEY, familyCn)
+  }, [familyCn])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(FOCUS_FAMILY_EN_KEY, familyEn)
+  }, [familyEn])
+
+  const fontFamilyStack = (() => {
+    const enOption = FOCUS_FAMILY_EN_OPTIONS.find((option) => option.label === familyEn) ?? FOCUS_FAMILY_EN_OPTIONS[0]
+    const cnOption = FOCUS_FAMILY_CN_OPTIONS.find((option) => option.label === familyCn) ?? FOCUS_FAMILY_CN_OPTIONS[0]
+    return `${enOption.stack}, ${cnOption.stack}, sans-serif`
+  })()
 
   useEffect(() => {
     const measure = () => {
@@ -413,7 +458,7 @@ function ReplayFocusOverlay({
           </div>
         </div>
 
-        <div className="flex min-w-[320px] max-w-2xl flex-1 items-center gap-2">
+        <div className="flex min-w-[320px] max-w-6xl flex-1 items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -444,6 +489,38 @@ function ReplayFocusOverlay({
                 {option.label}
               </button>
             ))}
+          </div>
+          <div
+            className="hidden h-10 shrink-0 items-center gap-1.5 rounded-xl bg-white px-2.5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700 xl:flex"
+            title="选择中英文字体"
+          >
+            <span className="text-xs text-slate-500 dark:text-slate-400">中</span>
+            <select
+              value={familyCn}
+              onChange={(event) => setFamilyCn(event.target.value)}
+              className="h-7 rounded-md bg-transparent px-1 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-brand-500/30 dark:text-slate-200"
+              style={{ fontFamily: (FOCUS_FAMILY_CN_OPTIONS.find((option) => option.label === familyCn) ?? FOCUS_FAMILY_CN_OPTIONS[0]).stack }}
+            >
+              {FOCUS_FAMILY_CN_OPTIONS.map((option) => (
+                <option key={option.label} value={option.label} style={{ fontFamily: option.stack }}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-slate-300 dark:text-slate-600">|</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">英</span>
+            <select
+              value={familyEn}
+              onChange={(event) => setFamilyEn(event.target.value)}
+              className="h-7 rounded-md bg-transparent px-1 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-brand-500/30 dark:text-slate-200"
+              style={{ fontFamily: (FOCUS_FAMILY_EN_OPTIONS.find((option) => option.label === familyEn) ?? FOCUS_FAMILY_EN_OPTIONS[0]).stack }}
+            >
+              {FOCUS_FAMILY_EN_OPTIONS.map((option) => (
+                <option key={option.label} value={option.label} style={{ fontFamily: option.stack }}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div
             className="hidden h-10 shrink-0 items-center gap-2 rounded-xl bg-white px-3 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700 md:flex"
@@ -515,6 +592,7 @@ function ReplayFocusOverlay({
               className="h-full space-y-6"
               compact={false}
               fontSize={fontPx}
+              fontFamily={fontFamilyStack}
             />
           </div>
         )}

@@ -14,11 +14,13 @@ export function ConversationEventList({
   className,
   compact = true,
   fontSize,
+  fontFamily,
 }: {
   events: ReplayEvent[]
   className?: string
   compact?: boolean
   fontSize?: number
+  fontFamily?: string
 }) {
   return (
     <ul className={cn('space-y-4 overflow-y-auto pr-1', className)}>
@@ -27,7 +29,7 @@ export function ConversationEventList({
           key={event.id}
           className={cn('flex', event.role === 'user' ? 'justify-end' : 'justify-start')}
         >
-          <MessageBubble event={event} compact={compact} fontSize={fontSize} />
+          <MessageBubble event={event} compact={compact} fontSize={fontSize} fontFamily={fontFamily} />
         </li>
       ))}
     </ul>
@@ -38,15 +40,21 @@ export function MessageBubble({
   event,
   compact = false,
   fontSize,
+  fontFamily,
 }: {
   event: ReplayEvent
   compact?: boolean
   fontSize?: number
+  fontFamily?: string
 }) {
   const isUser = event.role === 'user'
+  const inlineStyle: { fontSize?: string; fontFamily?: string } = {}
+  if (fontSize) inlineStyle.fontSize = `${fontSize}px`
+  if (fontFamily) inlineStyle.fontFamily = fontFamily
+  const hasInline = Object.keys(inlineStyle).length > 0
   return (
     <article
-      style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
+      style={hasInline ? inlineStyle : undefined}
       className={cn(
         'max-w-[92%] rounded-2xl px-4 py-3 shadow-sm ring-1',
         !fontSize && (compact ? 'text-sm' : 'text-[15px]'),
