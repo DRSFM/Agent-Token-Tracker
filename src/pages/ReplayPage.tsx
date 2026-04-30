@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Clock3, GripVertical, Hash, Maximize2, MessageSquare, Minimize2, Search, X } from 'lucide-react'
+import { Braces, Clock3, GripVertical, Hash, Maximize2, MessageSquare, Minimize2, Search, X } from 'lucide-react'
 import { RangeSelect } from '@/components/filters/RangeSelect'
 import { SourceTabs, type SourceFilter } from '@/components/filters/SourceTabs'
 import { SourceBadge } from '@/components/filters/SourceBadge'
 import { ConversationEventList } from '@/components/replay/ConversationView'
+import { OpenAIMessageList, flattenEventForSearch } from '@/components/replay/OpenAIMessageView'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
 import { useAllRequests } from '@/hooks/useAllRequests'
 import { aggregateSessions, inRange, lastNDays, type SessionAggregate } from '@/lib/aggregations'
@@ -49,6 +50,9 @@ const FOCUS_FAMILY_EN_OPTIONS: { label: string; stack: string }[] = [
 const FOCUS_FAMILY_CN_DEFAULT = FOCUS_FAMILY_CN_OPTIONS[0].label
 const FOCUS_FAMILY_EN_DEFAULT = FOCUS_FAMILY_EN_OPTIONS[0].label
 
+const VIEW_MODE_KEY = 'replay.viewMode'
+type ViewMode = 'standard' | 'openai'
+
 export default function ReplayPage() {
   const [days, setDays] = useState(30)
   const [source, setSource] = useState<SourceFilter>('all')
@@ -59,7 +63,17 @@ export default function ReplayPage() {
   const [replayError, setReplayError] = useState<unknown>(null)
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const [focusMode, setFocusMode] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window === 'undefined') return 'standard'
+    const saved = window.localStorage.getItem(VIEW_MODE_KEY)
+    return saved === 'openai' ? 'openai' : 'standard'
+  })
   const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(VIEW_MODE_KEY, viewMode)
+  }, [viewMode])
 
   const selectedId = searchParams.get('sid')
   const { data, loading, error, refresh } = useAllRequests()
@@ -92,12 +106,13 @@ export default function ReplayPage() {
     [selected, visibleRecords],
   )
 
+  const conversationOnly = viewMode === 'standard'
   const replayOptions = useMemo<ReplaySessionOptions>(() => ({
     ...replayWindowFromRequests(selectedRecords),
     includeRaw: false,
-    conversationOnly: true,
+    conversationOnly,
     limit: REPLAY_LIMIT,
-  }), [selectedRecords])
+  }), [selectedRecords, conversationOnly])
   const selectedSessionId = selected?.sessionId
   const selectedSource = selected?.source
   const replayFrom = replayOptions.from
@@ -110,6 +125,7 @@ export default function ReplayPage() {
       replayFrom ?? '',
       replayTo ?? '',
       REPLAY_LIMIT,
+      conversationOnly ? 'conv' : 'all',
     ].join('|')
     : ''
 
@@ -129,7 +145,7 @@ export default function ReplayPage() {
       from: replayFrom,
       to: replayTo,
       includeRaw: false,
-      conversationOnly: true,
+      conversationOnly,
       limit: REPLAY_LIMIT,
     })
       .then((nextEvents) => {
@@ -147,16 +163,19 @@ export default function ReplayPage() {
     return () => {
       cancelled = true
     }
-  }, [loadedKey, replayFrom, replayKey, replayTo, selectedSessionId, selectedSource])
+  }, [loadedKey, replayFrom, replayKey, replayTo, selectedSessionId, selectedSource, conversationOnly])
 
   const filteredEvents = useMemo(() => {
     if (!events) return []
     const q = messageQuery.trim().toLowerCase()
     if (!q) return events
+    if (viewMode === 'openai') {
+      return events.filter((event) => flattenEventForSearch(event).includes(q))
+    }
     return events.filter((event) =>
       [event.content, event.model, event.role].some((value) => value?.toLowerCase().includes(q)),
     )
-  }, [events, messageQuery])
+  }, [events, messageQuery, viewMode])
 
   const selectSession = (session: SessionAggregate) => {
     const next = new URLSearchParams(searchParams)
@@ -175,6 +194,8 @@ export default function ReplayPage() {
           error={replayError}
           messageQuery={messageQuery}
           setMessageQuery={setMessageQuery}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
           onClose={() => setFocusMode(false)}
           onRetry={() => {
             setLoadedKey(null)
@@ -271,19 +292,22 @@ export default function ReplayPage() {
                   <ReplayMetric icon={Clock3} label="最近" value={formatRelativeMinutes(selected.lastActiveAt)} />
                 </div>
 
-                <div className="relative mt-4">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={messageQuery}
-                    onChange={(event) => setMessageQuery(event.target.value)}
-                    placeholder="搜索我的输入 / 助手回复"
-                    className="h-10 w-full rounded-xl border border-transparent bg-slate-100/80 pl-10 pr-24 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-800/70 dark:text-slate-200"
-                  />
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <div className="relative min-w-[200px] flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={messageQuery}
+                      onChange={(event) => setMessageQuery(event.target.value)}
+                      placeholder={viewMode === 'openai' ? '搜索消息 / 工具调用 / 参数' : '搜索我的输入 / 助手回复'}
+                      className="h-10 w-full rounded-xl border border-transparent bg-slate-100/80 pl-10 pr-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-800/70 dark:text-slate-200"
+                    />
+                  </div>
+                  <ViewModeToggle value={viewMode} onChange={setViewMode} />
                   <button
                     type="button"
                     onClick={() => setFocusMode(true)}
                     disabled={!selected || loadingReplay || !!replayError || (events?.length ?? 0) === 0}
-                    className="absolute right-1.5 top-1/2 inline-flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-lg bg-white px-2.5 text-xs font-medium text-brand-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-900 dark:text-brand-300 dark:ring-slate-700"
+                    className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 text-xs font-medium text-brand-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-900 dark:text-brand-300 dark:ring-slate-700"
                     title="进入沉浸回放"
                   >
                     <Maximize2 className="h-3.5 w-3.5" />
@@ -312,6 +336,11 @@ export default function ReplayPage() {
                   />
                 ) : filteredEvents.length === 0 ? (
                   <EmptyState title="没有匹配消息" hint="换个关键词或清空搜索" className="py-16" />
+                ) : viewMode === 'openai' ? (
+                  <OpenAIMessageList
+                    events={filteredEvents}
+                    className="h-full"
+                  />
                 ) : (
                   <ConversationEventList
                     events={filteredEvents}
@@ -341,6 +370,8 @@ function ReplayFocusOverlay({
   error,
   messageQuery,
   setMessageQuery,
+  viewMode,
+  setViewMode,
   onClose,
   onRetry,
 }: {
@@ -350,6 +381,8 @@ function ReplayFocusOverlay({
   error: unknown
   messageQuery: string
   setMessageQuery: (value: string) => void
+  viewMode: ViewMode
+  setViewMode: (mode: ViewMode) => void
   onClose: () => void
   onRetry: () => void
 }) {
@@ -464,10 +497,12 @@ function ReplayFocusOverlay({
             <input
               value={messageQuery}
               onChange={(event) => setMessageQuery(event.target.value)}
-              placeholder="搜索我的输入 / 助手回复"
+              placeholder={viewMode === 'openai' ? '搜索消息 / 工具调用 / 参数' : '搜索我的输入 / 助手回复'}
               className="h-10 w-full rounded-xl border border-slate-200/70 bg-white/85 pl-10 pr-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200"
             />
           </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} compact />
+
           <div
             className="hidden h-10 shrink-0 items-center gap-1 rounded-xl bg-white px-2 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700 lg:flex"
             title="切换对话字号"
@@ -587,16 +622,71 @@ function ReplayFocusOverlay({
             >
               <GripVertical className="h-4 w-4 text-slate-500 transition group-hover:text-white dark:text-slate-300" />
             </div>
-            <ConversationEventList
-              events={events}
-              className="h-full space-y-6"
-              compact={false}
-              fontSize={fontPx}
-              fontFamily={fontFamilyStack}
-            />
+            {viewMode === 'openai' ? (
+              <OpenAIMessageList
+                events={events}
+                className="h-full"
+                fontSize={fontPx}
+                fontFamily={fontFamilyStack}
+              />
+            ) : (
+              <ConversationEventList
+                events={events}
+                className="h-full space-y-6"
+                compact={false}
+                fontSize={fontPx}
+                fontFamily={fontFamilyStack}
+              />
+            )}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function ViewModeToggle({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: ViewMode
+  onChange: (mode: ViewMode) => void
+  compact?: boolean
+}) {
+  const items: { key: ViewMode; label: string; icon: typeof MessageSquare; title: string }[] = [
+    { key: 'standard', label: '标准', icon: MessageSquare, title: '标准对话视图：仅展示用户和助手的最终输出' },
+    { key: 'openai', label: 'OpenAI', icon: Braces, title: 'OpenAI Message 格式：展示工具调用 / 参数 / 结果' },
+  ]
+  return (
+    <div
+      className={cn(
+        'inline-flex shrink-0 items-center rounded-xl bg-white p-0.5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700',
+        compact ? 'h-10' : 'h-10',
+      )}
+      title="切换对话展示模式"
+    >
+      {items.map((item) => {
+        const Icon = item.icon
+        const active = value === item.key
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onChange(item.key)}
+            title={item.title}
+            className={cn(
+              'inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition',
+              active
+                ? 'bg-brand-500 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {item.label}
+          </button>
+        )
+      })}
     </div>
   )
 }
