@@ -26,6 +26,7 @@ import {
   installUpdate,
   setUpdateSettings,
 } from './updater'
+import { getQuotaStatus } from './quota'
 
 function broadcastDataChanged() {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -104,6 +105,9 @@ export function registerIpcHandlers() {
     }
     return result
   })
+  ipcMain.handle('token:getQuotaStatus', async (_e, force?: boolean) =>
+    getQuotaStatus(Boolean(force)),
+  )
 
   ipcMain.handle('token:getReplaySession', async (
     _e,

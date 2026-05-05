@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-05-06
+
+### Added
+- 新增「余量额度」页面，展示自己的账号 / 其余来源两组账号的 5h 与 7d 剩余额度
+- Electron 主进程接入 ChatGPT usage quota 查询，token 仅在后端侧读取和使用，前端不接收 token、不展示 raw JSON
+- 余量扫描额外支持 `F:\vscode代码\cpa凭证学习` 下的账号分组目录，避免手动复制凭证文件
+- 新增一键启动开发版应用的 `open-source.bat`
+
 ## [1.2.2] - 2026-05-01
 
 ### Added

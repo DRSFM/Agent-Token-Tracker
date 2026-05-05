@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, MessageSquare, ScrollText, Box, TrendingUp, Settings, Database, RefreshCcw } from 'lucide-react'
+import { LayoutGrid, MessageSquare, ScrollText, Box, TrendingUp, Settings, Database, RefreshCcw, Gauge } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/replay', label: '回放', icon: ScrollText },
   { to: '/models', label: '模型', icon: Box },
   { to: '/trends', label: '趋势', icon: TrendingUp },
+  { to: '/quota', label: '余量', icon: Gauge },
   { to: '/settings', label: '设置', icon: Settings },
 ]
 

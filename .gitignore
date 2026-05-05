@@ -10,6 +10,12 @@ release
 .vite
 .env.local
 
+# Local account credentials must never be committed or published
+codex-*.json
+自己的账号/
+其余来源/
+.cli-proxy-api/
+
 # Internal dev handoff docs (not for public repo)
 HANDOFF_FOR_CODEX.md
 

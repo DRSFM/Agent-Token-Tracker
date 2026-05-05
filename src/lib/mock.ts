@@ -5,6 +5,7 @@ import type {
   HeatmapCell,
   ModelShare,
   OverviewStats,
+  QuotaStatus,
   RequestRecord,
   SessionSummary,
   TokenAPI,
@@ -210,6 +211,98 @@ const dataSourceStatus: DataSourceStatus = {
   ],
 }
 
+const quotaStatus: QuotaStatus = {
+  updatedAt: new Date().toISOString(),
+  refreshed: true,
+  nextRefreshAt: new Date(Date.now() + 60_000).toISOString(),
+  groups: [
+    { accountGroup: '自己的账号', total: 2, available: 2, limited: 0, error: 0 },
+    { accountGroup: '其余来源', total: 3, available: 2, limited: 0, error: 1 },
+  ],
+  quotas: [
+    {
+      timestamp: new Date().toISOString(),
+      email: 'primary@example.com',
+      plan: 'plus',
+      allowed: true,
+      limitReached: false,
+      primaryUsedPercent: 7,
+      primaryRemainingPercent: 93,
+      primaryResetAt: '2026/5/6 00:00:00',
+      secondaryUsedPercent: 3,
+      secondaryRemainingPercent: 97,
+      secondaryResetAt: '2026/5/12 00:00:00',
+      creditsBalance: '',
+      accountGroup: '自己的账号',
+      error: '',
+    },
+    {
+      timestamp: new Date().toISOString(),
+      email: 'backup@example.com',
+      plan: 'plus',
+      allowed: true,
+      limitReached: false,
+      primaryUsedPercent: 14,
+      primaryRemainingPercent: 86,
+      primaryResetAt: '2026/5/6 00:00:00',
+      secondaryUsedPercent: 44,
+      secondaryRemainingPercent: 56,
+      secondaryResetAt: '2026/5/12 00:00:00',
+      creditsBalance: '',
+      accountGroup: '自己的账号',
+      error: '',
+    },
+    {
+      timestamp: new Date().toISOString(),
+      email: 'shared-a@example.com',
+      plan: 'plus',
+      allowed: true,
+      limitReached: false,
+      primaryUsedPercent: 11,
+      primaryRemainingPercent: 89,
+      primaryResetAt: '2026/5/6 05:05:59',
+      secondaryUsedPercent: 17,
+      secondaryRemainingPercent: 83,
+      secondaryResetAt: '2026/5/12 19:05:48',
+      creditsBalance: '',
+      accountGroup: '其余来源',
+      error: '',
+    },
+    {
+      timestamp: new Date().toISOString(),
+      email: 'shared-b@example.com',
+      plan: 'plus',
+      allowed: true,
+      limitReached: false,
+      primaryUsedPercent: 6,
+      primaryRemainingPercent: 94,
+      primaryResetAt: '2026/5/6 05:06:23',
+      secondaryUsedPercent: 17,
+      secondaryRemainingPercent: 83,
+      secondaryResetAt: '2026/5/12 19:06:03',
+      creditsBalance: '',
+      accountGroup: '其余来源',
+      error: '',
+    },
+    {
+      timestamp: new Date().toISOString(),
+      email: 'expired@example.com',
+      plan: '',
+      allowed: false,
+      limitReached: false,
+      primaryUsedPercent: null,
+      primaryRemainingPercent: null,
+      primaryResetAt: '',
+      secondaryUsedPercent: null,
+      secondaryRemainingPercent: null,
+      secondaryResetAt: '',
+      creditsBalance: '',
+      accountGroup: '其余来源',
+      error: 'HTTP 401: Unauthorized',
+    },
+  ],
+}
+
 export const mockAPI: TokenAPI = {
   async getOverviewStats() {
     return stats
@@ -267,6 +360,9 @@ export const mockAPI: TokenAPI = {
   },
   async syncRemoteLogs() {
     return { ok: false, message: 'Mock 环境不可同步 SSH。' }
+  },
+  async getQuotaStatus() {
+    return quotaStatus
   },
   async getReplaySession(sessionId) {
     return [

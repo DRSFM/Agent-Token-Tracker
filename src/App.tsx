@@ -5,6 +5,7 @@ import SessionsPage from '@/pages/SessionsPage'
 import ReplayPage from '@/pages/ReplayPage'
 import ModelsPage from '@/pages/ModelsPage'
 import TrendsPage from '@/pages/TrendsPage'
+import QuotaPage from '@/pages/QuotaPage'
 import SettingsPage from '@/pages/SettingsPage'
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/replay" element={<ReplayPage />} />
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/trends" element={<TrendsPage />} />
+        <Route path="/quota" element={<QuotaPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </AppShell>

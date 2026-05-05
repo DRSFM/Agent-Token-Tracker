@@ -56,6 +56,7 @@ export const api: TokenAPI = {
   getRemoteSyncStatus: wrap('getRemoteSyncStatus'),
   testRemoteConnection: wrap('testRemoteConnection'),
   syncRemoteLogs: wrap('syncRemoteLogs'),
+  getQuotaStatus: wrap('getQuotaStatus'),
   getReplaySession: wrap('getReplaySession'),
   getUpdateSettings: wrap('getUpdateSettings'),
   setUpdateSettings: wrap('setUpdateSettings'),

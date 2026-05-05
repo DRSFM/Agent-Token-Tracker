@@ -170,6 +170,41 @@ export interface RemoteSyncStatus {
   codexCachePath: string
 }
 
+export type QuotaAccountGroup = '自己的账号' | '其余来源'
+
+export interface QuotaAccountStatus {
+  timestamp: string
+  email: string
+  plan: string
+  allowed: boolean
+  limitReached: boolean
+  primaryUsedPercent: number | null
+  primaryRemainingPercent: number | null
+  primaryResetAt: string
+  secondaryUsedPercent: number | null
+  secondaryRemainingPercent: number | null
+  secondaryResetAt: string
+  creditsBalance: string
+  accountGroup: QuotaAccountGroup
+  error: string
+}
+
+export interface QuotaGroupSummary {
+  accountGroup: QuotaAccountGroup
+  total: number
+  available: number
+  limited: number
+  error: number
+}
+
+export interface QuotaStatus {
+  quotas: QuotaAccountStatus[]
+  groups: QuotaGroupSummary[]
+  updatedAt: string
+  refreshed: boolean
+  nextRefreshAt?: string
+}
+
 export type ReplayEventRole = 'user' | 'assistant' | 'system' | 'tool' | 'event'
 
 export type ReplayEventType =
@@ -285,6 +320,9 @@ export interface TokenAPI {
 
   /** 同步远程日志到本地缓存并触发重扫 */
   syncRemoteLogs(): Promise<{ ok: boolean; message: string; syncedAt?: string }>
+
+  /** 查询 ChatGPT 5h/7d 余量。token 仅在主进程使用，不返回前端。 */
+  getQuotaStatus(force?: boolean): Promise<QuotaStatus>
 
   /** 按需加载某个会话的历史回放事件 */
   getReplaySession(

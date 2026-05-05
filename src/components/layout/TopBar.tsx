@@ -13,6 +13,7 @@ const titleMap: Record<string, string> = {
   '/replay': '回放',
   '/models': '模型',
   '/trends': '趋势',
+  '/quota': '余量额度',
   '/settings': '设置',
 }
 
