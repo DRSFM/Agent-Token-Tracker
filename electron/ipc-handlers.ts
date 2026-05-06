@@ -27,6 +27,7 @@ import {
   setUpdateSettings,
 } from './updater'
 import { getQuotaStatus } from './quota'
+import { syncQuotaToCpa } from './cpa-sync'
 
 function broadcastDataChanged() {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -108,6 +109,7 @@ export function registerIpcHandlers() {
   ipcMain.handle('token:getQuotaStatus', async (_e, force?: boolean) =>
     getQuotaStatus(Boolean(force)),
   )
+  ipcMain.handle('token:syncQuotaToCpa', async () => syncQuotaToCpa())
 
   ipcMain.handle('token:getReplaySession', async (
     _e,

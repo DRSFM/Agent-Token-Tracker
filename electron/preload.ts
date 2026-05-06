@@ -24,6 +24,7 @@ const api: TokenAPI = {
   testRemoteConnection: () => ipcRenderer.invoke('token:testRemoteConnection'),
   syncRemoteLogs: () => ipcRenderer.invoke('token:syncRemoteLogs'),
   getQuotaStatus: (force) => ipcRenderer.invoke('token:getQuotaStatus', force),
+  syncQuotaToCpa: () => ipcRenderer.invoke('token:syncQuotaToCpa'),
   getReplaySession: (sessionId, source, options) =>
     ipcRenderer.invoke('token:getReplaySession', sessionId, source, options),
   getUpdateSettings: () => ipcRenderer.invoke('token:getUpdateSettings'),

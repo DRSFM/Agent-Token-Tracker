@@ -1,13 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Clock3, RefreshCcw, ShieldCheck, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  Clock3,
+  LayoutGrid,
+  List,
+  RefreshCcw,
+  ShieldCheck,
+  Users,
+} from 'lucide-react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
 import { api, isMock } from '@/lib/api'
 import { formatRelativeMinutes } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { QuotaAccountGroup, QuotaAccountStatus, QuotaStatus } from '@/types/api'
+import type {
+  QuotaAccountGroup,
+  QuotaAccountStatus,
+  QuotaStatus,
+  SyncQuotaToCpaResult,
+} from '@/types/api'
 
 const GROUPS: QuotaAccountGroup[] = ['自己的账号', '其余来源']
+type QuotaScope = 'all' | QuotaAccountGroup
+type QuotaViewMode = 'table' | 'cards'
+
+const scopeOptions: Array<{ value: QuotaScope; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: '自己的账号', label: '仅自己账号' },
+  { value: '其余来源', label: '仅其他来源' },
+]
+
+const viewOptions: Array<{ value: QuotaViewMode; label: string; icon: typeof List }> = [
+  { value: 'table', label: '表格', icon: List },
+  { value: 'cards', label: '卡片', icon: LayoutGrid },
+]
 
 const groupTone: Record<QuotaAccountGroup, string> = {
   自己的账号: 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300',
@@ -25,10 +51,19 @@ function quotaLabel(value: number | null) {
   return value === null ? '不可用' : `${value}%`
 }
 
-function QuotaBar({ value }: { value: number | null }) {
+function formatQuotaError(error: string) {
+  if (/401|Unauthorized|invalidated|signing in again/i.test(error)) {
+    return '额度获取失败：401，认证已失效，请重新登录'
+  }
+  if (/missing access_token/i.test(error)) return '额度获取失败：认证文件缺少 access_token'
+  if (/timeout/i.test(error)) return '额度获取失败：请求超时，请稍后重试'
+  return `额度获取失败：${error}`
+}
+
+function QuotaBar({ value, className }: { value: number | null; className?: string }) {
   const width = value === null ? 100 : Math.max(0, Math.min(100, value))
   return (
-    <div className="min-w-[108px]">
+    <div className={cn('min-w-[108px]', className)}>
       <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
         <div className={cn('h-full rounded-full', percentTone(value))} style={{ width: `${width}%` }} />
       </div>
@@ -40,6 +75,29 @@ function QuotaBar({ value }: { value: number | null }) {
       >
         {quotaLabel(value)}
       </div>
+    </div>
+  )
+}
+
+function QuotaLimitRow({
+  label,
+  value,
+  resetAt,
+}: {
+  label: string
+  value: number | null
+  resetAt: string
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-medium text-slate-700 dark:text-slate-200">{label}</span>
+        <span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
+          <span className="font-semibold text-slate-800 dark:text-slate-100">{quotaLabel(value)}</span>
+          {resetAt && <span className="ml-2">{resetAt}</span>}
+        </span>
+      </div>
+      <QuotaBar value={value} className="min-w-0" />
     </div>
   )
 }
@@ -116,7 +174,9 @@ function GroupTable({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAcco
                     </td>
                     <td className="py-3">
                       {quota.error ? (
-                        <div className="break-words text-xs text-rose-500 dark:text-rose-300">{quota.error}</div>
+                        <div className="break-words text-xs text-rose-500 dark:text-rose-300">
+                          {formatQuotaError(quota.error)}
+                        </div>
                       ) : (
                         <div className="space-y-1 text-xs tabular-nums text-slate-600 dark:text-slate-300">
                           <div>{quota.primaryResetAt || '未返回'}</div>
@@ -135,11 +195,96 @@ function GroupTable({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAcco
   )
 }
 
+function AccountCard({ quota }: { quota: QuotaAccountStatus }) {
+  return (
+    <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-4 shadow-sm transition hover:bg-white/90 dark:border-slate-800 dark:bg-slate-900/50 dark:hover:bg-slate-900/70">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100" title={quota.email}>
+            {quota.email}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {quota.plan && (
+              <span className="rounded-lg bg-brand-500/10 px-2 py-1 text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
+                {quota.plan}
+              </span>
+            )}
+            <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              {quota.accountGroup}
+            </span>
+          </div>
+        </div>
+        <StatusPill quota={quota} />
+      </div>
+
+      <div className="mt-4 h-8 rounded-xl bg-slate-50/80 px-3 py-2 dark:bg-slate-800/50">
+        <div className="flex items-center gap-1.5">
+          {Array.from({ length: 18 }).map((_, index) => (
+            <span
+              key={index}
+              className={cn(
+                'h-1.5 flex-1 rounded-full',
+                quota.error
+                  ? 'bg-slate-200 dark:bg-slate-700'
+                  : index < Math.round(((quota.primaryRemainingPercent ?? 0) / 100) * 18)
+                    ? percentTone(quota.primaryRemainingPercent)
+                    : 'bg-slate-200 dark:bg-slate-700',
+              )}
+            />
+          ))}
+        </div>
+      </div>
+
+      {quota.error ? (
+        <div className="mt-4 rounded-xl border border-rose-300 bg-rose-50/70 px-3 py-2 text-sm leading-6 text-rose-600 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">
+          {formatQuotaError(quota.error)}
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <QuotaLimitRow label="5 小时限额" value={quota.primaryRemainingPercent} resetAt={quota.primaryResetAt} />
+          <QuotaLimitRow label="7 天限额" value={quota.secondaryRemainingPercent} resetAt={quota.secondaryResetAt} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GroupCards({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAccountStatus[] }) {
+  return (
+    <Card>
+      <CardHeader
+        title={group}
+        subtitle={`${rows.length} 个账号`}
+        action={
+          <span className={cn('rounded-lg p-2', groupTone[group])}>
+            <Users className="h-4 w-4" />
+          </span>
+        }
+      />
+      <CardBody className="pt-3">
+        {rows.length === 0 ? (
+          <EmptyState title="暂无账号" hint="未发现该分组下的 codex 认证文件" className="py-10" />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+            {rows.map((quota, index) => (
+              <AccountCard key={`${quota.accountGroup}:${quota.email}:${index}`} quota={quota} />
+            ))}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
 export default function QuotaPage() {
   const [status, setStatus] = useState<QuotaStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<unknown>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<SyncQuotaToCpaResult | null>(null)
+  const [scope, setScope] = useState<QuotaScope>('all')
+  const [viewMode, setViewMode] = useState<QuotaViewMode>('cards')
 
   const load = useCallback(async (force = false) => {
     if (force) setRefreshing(true)
@@ -161,25 +306,50 @@ export default function QuotaPage() {
     return () => window.clearInterval(interval)
   }, [load])
 
+  const syncToCpa = useCallback(async () => {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const result = await api.syncQuotaToCpa()
+      setSyncResult(result)
+      if (result.ok) await load(true)
+    } finally {
+      setSyncing(false)
+    }
+  }, [load])
+
+  const visibleQuotas = useMemo(
+    () =>
+      (status?.quotas ?? []).filter((quota) =>
+        scope === 'all' ? true : quota.accountGroup === scope,
+      ),
+    [scope, status],
+  )
+
+  const visibleGroups = useMemo(
+    () => (scope === 'all' ? GROUPS : GROUPS.filter((group) => group === scope)),
+    [scope],
+  )
+
   const byGroup = useMemo(() => {
     const grouped: Record<QuotaAccountGroup, QuotaAccountStatus[]> = {
       自己的账号: [],
       其余来源: [],
     }
-    for (const quota of status?.quotas ?? []) {
+    for (const quota of visibleQuotas) {
       grouped[quota.accountGroup].push(quota)
     }
     return grouped
-  }, [status])
+  }, [visibleQuotas])
 
-  const total = status?.quotas.length ?? 0
-  const available = status?.groups.reduce((sum, group) => sum + group.available, 0) ?? 0
-  const errorCount = status?.groups.reduce((sum, group) => sum + group.error, 0) ?? 0
-  const min5h = status?.quotas
+  const total = visibleQuotas.length
+  const available = visibleQuotas.filter((quota) => quota.allowed && !quota.error).length
+  const errorCount = visibleQuotas.filter((quota) => Boolean(quota.error)).length
+  const min5h = visibleQuotas
     .map((quota) => quota.primaryRemainingPercent)
     .filter((value): value is number => value !== null)
     .sort((a, b) => a - b)[0]
-  const min7d = status?.quotas
+  const min7d = visibleQuotas
     .map((quota) => quota.secondaryRemainingPercent)
     .filter((value): value is number => value !== null)
     .sort((a, b) => a - b)[0]
@@ -190,10 +360,49 @@ export default function QuotaPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-50">余量额度</h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            自己的账号 / 其余来源 · 5h 与 7d 剩余额度
+            {scope === 'all' ? '自己的账号 / 其余来源' : scope} · 5h 与 7d 剩余额度
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-xl border border-slate-200/70 bg-white/70 p-1 dark:border-slate-700/70 dark:bg-slate-800/50">
+            {scopeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setScope(option.value)}
+                className={cn(
+                  'h-7 rounded-lg px-3 text-xs font-medium transition',
+                  scope === option.value
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700/70 dark:hover:text-slate-200',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-xl border border-slate-200/70 bg-white/70 p-1 dark:border-slate-700/70 dark:bg-slate-800/50">
+            {viewOptions.map((option) => {
+              const Icon = option.icon
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setViewMode(option.value)}
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition',
+                    viewMode === option.value
+                      ? 'bg-slate-800 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700/70 dark:hover:text-slate-200',
+                  )}
+                  title={`${option.label}视图`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
           {isMock && (
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
               示例数据
@@ -213,8 +422,39 @@ export default function QuotaPage() {
             <RefreshCcw className={cn('h-3.5 w-3.5 text-slate-400', refreshing && 'animate-spin')} />
             刷新余量
           </button>
+          <button
+            type="button"
+            onClick={syncToCpa}
+            disabled={syncing || refreshing}
+            className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          >
+            <RefreshCcw className={cn('h-3.5 w-3.5', syncing && 'animate-spin')} />
+            同步到 CPA 路由
+          </button>
         </div>
       </div>
+
+      {syncResult && (
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-sm',
+            syncResult.ok
+              ? 'border-emerald-200 bg-emerald-50/80 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+              : 'border-rose-200 bg-rose-50/80 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300',
+          )}
+        >
+          <span className="font-medium">
+            {syncResult.ok ? 'CPA 路由同步完成' : 'CPA 路由同步失败'}
+          </span>
+          {syncResult.ok ? (
+            <span className="tabular-nums">
+              updated {syncResult.updated} · unchanged {syncResult.unchanged} · missing {syncResult.missing}
+            </span>
+          ) : (
+            <span>{syncResult.message || '请确认 CPA dashboard 后端已启动'}</span>
+          )}
+        </div>
+      )}
 
       {error ? (
         <Card>
@@ -291,12 +531,23 @@ export default function QuotaPage() {
 
           {total === 0 ? (
             <Card>
-              <EmptyState title="暂无账号" hint="未发现自己的账号或其余来源分组下的 codex 认证文件" />
+              <EmptyState
+                title="暂无账号"
+                hint={
+                  scope === 'all'
+                    ? '未发现自己的账号或其余来源分组下的 codex 认证文件'
+                    : `未发现${scope}分组下的 codex 认证文件`
+                }
+              />
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {GROUPS.map((group) => (
-                <GroupTable key={group} group={group} rows={byGroup[group]} />
+              {visibleGroups.map((group) => (
+                viewMode === 'cards' ? (
+                  <GroupCards key={group} group={group} rows={byGroup[group]} />
+                ) : (
+                  <GroupTable key={group} group={group} rows={byGroup[group]} />
+                )
               ))}
             </div>
           )}

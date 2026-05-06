@@ -205,6 +205,15 @@ export interface QuotaStatus {
   nextRefreshAt?: string
 }
 
+export interface SyncQuotaToCpaResult {
+  ok: boolean
+  updated: number
+  unchanged: number
+  missing: number
+  syncedAt: string
+  message?: string
+}
+
 export type ReplayEventRole = 'user' | 'assistant' | 'system' | 'tool' | 'event'
 
 export type ReplayEventType =
@@ -323,6 +332,9 @@ export interface TokenAPI {
 
   /** 查询 ChatGPT 5h/7d 余量。token 仅在主进程使用，不返回前端。 */
   getQuotaStatus(force?: boolean): Promise<QuotaStatus>
+
+  /** 触发后端同步余量到 CPA 路由。只返回数量汇总，不返回敏感原文。 */
+  syncQuotaToCpa(): Promise<SyncQuotaToCpaResult>
 
   /** 按需加载某个会话的历史回放事件 */
   getReplaySession(

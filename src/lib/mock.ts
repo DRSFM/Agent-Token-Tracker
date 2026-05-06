@@ -364,6 +364,15 @@ export const mockAPI: TokenAPI = {
   async getQuotaStatus() {
     return quotaStatus
   },
+  async syncQuotaToCpa() {
+    return {
+      ok: true,
+      updated: 2,
+      unchanged: 1,
+      missing: 0,
+      syncedAt: new Date().toISOString(),
+    }
+  },
   async getReplaySession(sessionId) {
     return [
       {
