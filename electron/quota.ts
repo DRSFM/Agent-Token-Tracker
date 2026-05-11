@@ -1,13 +1,16 @@
 import fs from 'node:fs/promises'
+import http from 'node:http'
 import https from 'node:https'
 import os from 'node:os'
 import path from 'node:path'
+import tls from 'node:tls'
 import type {
   QuotaAccountGroup,
   QuotaAccountStatus,
   QuotaGroupSummary,
   QuotaStatus,
 } from '../src/types/api'
+import { getNetworkSettings } from './network-settings'
 
 const ACCOUNT_GROUPS: QuotaAccountGroup[] = ['自己的账号', '其余来源']
 const DEFAULT_AUTH_DIR = path.join(os.homedir(), '.cli-proxy-api')
@@ -15,10 +18,15 @@ const DEFAULT_CONFIG_DIR = path.join(DEFAULT_AUTH_DIR, 'usage-dashboard')
 const EXTRA_AUTH_DIRS = ['F:\\vscode代码\\cpa凭证学习']
 const QUOTA_URL = 'https://chatgpt.com/backend-api/wham/usage'
 const REFRESH_MS = 60_000
+const PLAN_FOLDERS = ['free', 'plus', 'pro5x', 'pro20x'] as const
+const PLAN_FOLDER_SET = new Set<string>(PLAN_FOLDERS)
+
+type QuotaPlanFolder = (typeof PLAN_FOLDERS)[number]
 
 interface AuthRecord {
   filePath: string
   accountGroup: QuotaAccountGroup
+  groupRoot: string
 }
 
 interface AuthFile {
@@ -92,18 +100,29 @@ async function walkAuthFiles(root: string, accountGroup: QuotaAccountGroup): Pro
         return
       }
       if (entry.isFile() && /^codex-.*\.json$/i.test(entry.name)) {
-        records.push({ filePath: child, accountGroup })
+        records.push({ filePath: child, accountGroup, groupRoot: root })
       }
     }),
   )
   return records
 }
 
+async function ensurePlanFolders(groupRoot: string) {
+  if (!(await pathExists(groupRoot))) return
+  await Promise.all(PLAN_FOLDERS.map((planFolder) => fs.mkdir(path.join(groupRoot, planFolder), { recursive: true })))
+}
+
+async function scanGroupAuthFiles(authDir: string, accountGroup: QuotaAccountGroup) {
+  const groupRoot = path.join(authDir, accountGroup)
+  await ensurePlanFolders(groupRoot)
+  return walkAuthFiles(groupRoot, accountGroup)
+}
+
 async function authFileRecords() {
   const authDirs = await resolveAuthDirs()
   const groups = await Promise.all(
     authDirs.flatMap((authDir) =>
-      ACCOUNT_GROUPS.map((group) => walkAuthFiles(path.join(authDir, group), group)),
+      ACCOUNT_GROUPS.map((group) => scanGroupAuthFiles(authDir, group)),
     ),
   )
   return [
@@ -119,8 +138,45 @@ function fallbackEmail(filePath: string) {
   return path
     .basename(filePath)
     .replace(/^codex-/i, '')
+    .replace(/-(free|plus|pro5x|pro20x)\.json$/i, '')
     .replace(/-plus\.json$/i, '')
     .replace(/\.json$/i, '')
+}
+
+function normalizedPath(value: string) {
+  return path.normalize(value).toLowerCase()
+}
+
+function normalizePlanFolder(plan: string): QuotaPlanFolder | null {
+  const normalized = plan.trim().toLowerCase().replace(/[\s_-]+/g, '')
+  return PLAN_FOLDER_SET.has(normalized) ? (normalized as QuotaPlanFolder) : null
+}
+
+async function nextAvailablePath(targetPath: string) {
+  if (!(await pathExists(targetPath))) return targetPath
+
+  const extension = path.extname(targetPath)
+  const basename = path.basename(targetPath, extension)
+  const directory = path.dirname(targetPath)
+  for (let index = 1; index <= 999; index += 1) {
+    const candidate = path.join(directory, `${basename}-${index}${extension}`)
+    if (!(await pathExists(candidate))) return candidate
+  }
+  throw new Error(`No available file name under ${directory}`)
+}
+
+async function moveAuthFileToPlanFolder(record: AuthRecord, plan: string) {
+  const planFolder = normalizePlanFolder(plan)
+  if (!planFolder) return record.filePath
+
+  const targetDir = path.join(record.groupRoot, planFolder)
+  const targetPath = path.join(targetDir, path.basename(record.filePath))
+  if (normalizedPath(record.filePath) === normalizedPath(targetPath)) return record.filePath
+
+  await fs.mkdir(targetDir, { recursive: true })
+  const availableTargetPath = await nextAvailablePath(targetPath)
+  await fs.rename(record.filePath, availableTargetPath)
+  return availableTargetPath
 }
 
 function percent(value: unknown) {
@@ -138,32 +194,45 @@ function resetTime(value: unknown) {
   return new Date(n * 1000).toLocaleString('zh-CN', { hour12: false })
 }
 
-function getJson(url: string, token: string): Promise<UsageResponse> {
+function requestOptions(token: string) {
+  return {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      'User-Agent': 'codex-cli',
+    },
+  }
+}
+
+function parseJsonResponse(
+  statusCode: number,
+  statusMessage: string | undefined,
+  chunks: Buffer[],
+  resolve: (value: UsageResponse) => void,
+  reject: (reason?: unknown) => void,
+) {
+  if (statusCode < 200 || statusCode >= 300) {
+    reject(new Error(`HTTP ${statusCode}: ${statusMessage || 'Request failed'}`))
+    return
+  }
+  try {
+    resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) as UsageResponse)
+  } catch {
+    reject(new Error('Invalid JSON response'))
+  }
+}
+
+function getJsonDirect(url: string, token: string): Promise<UsageResponse> {
   return new Promise((resolve, reject) => {
     const request = https.request(
       url,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-          'User-Agent': 'codex-cli',
-        },
-      },
+      requestOptions(token),
       (response) => {
         const chunks: Buffer[] = []
         response.on('data', (chunk: Buffer) => chunks.push(chunk))
         response.on('end', () => {
-          const statusCode = response.statusCode || 0
-          if (statusCode < 200 || statusCode >= 300) {
-            reject(new Error(`HTTP ${statusCode}: ${response.statusMessage || 'Request failed'}`))
-            return
-          }
-          try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) as UsageResponse)
-          } catch {
-            reject(new Error('Invalid JSON response'))
-          }
+          parseJsonResponse(response.statusCode || 0, response.statusMessage, chunks, resolve, reject)
         })
       },
     )
@@ -173,6 +242,76 @@ function getJson(url: string, token: string): Promise<UsageResponse> {
     request.on('error', reject)
     request.end()
   })
+}
+
+function getJsonViaHttpProxy(url: string, token: string, proxyUrl: string): Promise<UsageResponse> {
+  const target = new URL(url)
+  const proxy = new URL(proxyUrl)
+  const targetPort = Number(target.port || 443)
+  const proxyPort = Number(proxy.port || 80)
+  const auth =
+    proxy.username || proxy.password
+      ? Buffer.from(`${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`).toString('base64')
+      : ''
+
+  return new Promise((resolve, reject) => {
+    const connectRequest = http.request({
+      host: proxy.hostname,
+      port: proxyPort,
+      method: 'CONNECT',
+      path: `${target.hostname}:${targetPort}`,
+      headers: auth ? { 'Proxy-Authorization': `Basic ${auth}` } : undefined,
+    })
+
+    connectRequest.setTimeout(20_000, () => {
+      connectRequest.destroy(new Error('Proxy CONNECT timeout'))
+    })
+
+    connectRequest.on('connect', (response, socket) => {
+      if ((response.statusCode || 0) < 200 || (response.statusCode || 0) >= 300) {
+        socket.destroy()
+        reject(new Error(`Proxy CONNECT ${response.statusCode || 0}: ${response.statusMessage || 'Request failed'}`))
+        return
+      }
+
+      const tlsSocket = tls.connect({
+        socket,
+        servername: target.hostname,
+      })
+
+      tlsSocket.setTimeout(20_000, () => {
+        tlsSocket.destroy(new Error('Request timeout'))
+      })
+
+      const request = https.request(
+        {
+          ...requestOptions(token),
+          host: target.hostname,
+          path: `${target.pathname}${target.search}`,
+          servername: target.hostname,
+          createConnection: () => tlsSocket,
+        },
+        (response) => {
+          const chunks: Buffer[] = []
+          response.on('data', (chunk: Buffer) => chunks.push(chunk))
+          response.on('end', () => {
+            parseJsonResponse(response.statusCode || 0, response.statusMessage, chunks, resolve, reject)
+          })
+        },
+      )
+      request.on('error', reject)
+      request.end()
+    })
+
+    connectRequest.on('error', reject)
+    connectRequest.end()
+  })
+}
+
+async function getJson(url: string, token: string): Promise<UsageResponse> {
+  const { quotaProxyUrl } = await getNetworkSettings()
+  if (quotaProxyUrl) return getJsonViaHttpProxy(url, token, quotaProxyUrl)
+  return getJsonDirect(url, token)
 }
 
 function errorRow(record: AuthRecord, email: string, error: unknown, timestamp: string): QuotaAccountStatus {
@@ -210,7 +349,7 @@ async function refreshRecord(record: AuthRecord, timestamp: string): Promise<Quo
     const primaryUsed = percent(primary.used_percent)
     const secondaryUsed = percent(secondary.used_percent)
 
-    return {
+    const status: QuotaAccountStatus = {
       timestamp,
       email,
       plan: data.plan_type || '',
@@ -226,6 +365,15 @@ async function refreshRecord(record: AuthRecord, timestamp: string): Promise<Quo
       accountGroup: record.accountGroup,
       error: '',
     }
+
+    try {
+      await moveAuthFileToPlanFolder(record, status.plan)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      status.error = `分类移动失败：${message}`
+    }
+
+    return status
   } catch (error) {
     return errorRow(record, email, error, timestamp)
   }
@@ -274,4 +422,10 @@ export async function getQuotaStatus(force = false): Promise<QuotaStatus> {
       inFlight = null
     })
   return inFlight
+}
+
+export const __quotaTestHooks = {
+  ensurePlanFolders,
+  moveAuthFileToPlanFolder,
+  normalizePlanFolder,
 }

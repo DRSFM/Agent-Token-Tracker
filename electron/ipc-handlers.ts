@@ -28,6 +28,7 @@ import {
 } from './updater'
 import { getQuotaStatus } from './quota'
 import { syncQuotaToCpa } from './cpa-sync'
+import { getNetworkSettings, setNetworkSettings } from './network-settings'
 
 function broadcastDataChanged() {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -106,6 +107,8 @@ export function registerIpcHandlers() {
     }
     return result
   })
+  ipcMain.handle('token:getNetworkSettings', async () => getNetworkSettings())
+  ipcMain.handle('token:setNetworkSettings', async (_e, settings) => setNetworkSettings(settings))
   ipcMain.handle('token:getQuotaStatus', async (_e, force?: boolean) =>
     getQuotaStatus(Boolean(force)),
   )

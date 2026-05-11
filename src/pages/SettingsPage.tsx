@@ -10,6 +10,7 @@ import {
   FolderOpen,
   RefreshCcw,
   DownloadCloud,
+  Globe2,
   Save,
   Server,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import { api } from '@/lib/api'
 import type {
   AgentSource,
   DataSourceStatus,
+  NetworkSettings,
   RemoteSourceSettings,
   RemoteSyncStatus,
   UpdateProviderSettings,
@@ -74,12 +76,17 @@ export default function SettingsPage() {
   })
   const [remoteStatus, setRemoteStatus] = useState<RemoteSyncStatus | null>(null)
   const [remoteMessage, setRemoteMessage] = useState('')
+  const [networkSettings, setNetworkSettings] = useState<NetworkSettings>({
+    quotaProxyUrl: '',
+  })
+  const [networkMessage, setNetworkMessage] = useState('')
   const [updateProvider, setUpdateProvider] = useState<UpdateProviderSettings['provider']>('none')
   const [githubOwner, setGithubOwner] = useState('')
   const [githubRepo, setGithubRepo] = useState('')
   const [genericUrl, setGenericUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [remoteBusy, setRemoteBusy] = useState(false)
+  const [networkBusy, setNetworkBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -99,6 +106,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void reloadRemote()
+  }, [])
+
+  useEffect(() => {
+    void reloadNetwork()
   }, [])
 
   useEffect(() => {
@@ -138,6 +149,16 @@ export default function SettingsPage() {
       setRemoteMessage(nextStatus.lastError ?? '')
     } catch {
       setRemoteMessage('读取远程配置失败。')
+    }
+  }
+
+  const reloadNetwork = async () => {
+    try {
+      const settings = await api.getNetworkSettings()
+      setNetworkSettings(settings)
+      setNetworkMessage(settings.quotaProxyUrl ? '余量查询将通过代理访问 ChatGPT。' : '未配置代理，余量查询将直连。')
+    } catch {
+      setNetworkMessage('读取网络配置失败。')
     }
   }
 
@@ -217,6 +238,21 @@ export default function SettingsPage() {
       await Promise.all([reloadRemote(), reloadStatus()])
     } finally {
       setRemoteBusy(false)
+    }
+  }
+
+  const onSaveNetwork = async () => {
+    setNetworkBusy(true)
+    try {
+      const saved = await api.setNetworkSettings(networkSettings)
+      setNetworkSettings(saved)
+      setNetworkMessage(
+        saved.quotaProxyUrl
+          ? `余量查询代理已保存：${saved.quotaProxyUrl}`
+          : '已关闭余量查询代理。',
+      )
+    } finally {
+      setNetworkBusy(false)
     }
   }
 
@@ -459,6 +495,67 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="网络代理"
+          subtitle="仅用于余量查询，不影响本地 CPA 同步"
+          action={
+            <span className="rounded-lg bg-blue-100 p-2 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300">
+              <Globe2 className="w-4 h-4" />
+            </span>
+          }
+        />
+        <CardBody className="space-y-4">
+          <label className="text-xs text-slate-500 dark:text-slate-400">
+            余量查询代理
+            <input
+              value={networkSettings.quotaProxyUrl}
+              onChange={(e) =>
+                setNetworkSettings((current) => ({ ...current, quotaProxyUrl: e.target.value }))
+              }
+              placeholder="http://127.0.0.1:7897"
+              className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
+            />
+          </label>
+          <div className="rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/60 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
+            <div className="flex items-center gap-2">
+              <Globe2 className="w-4 h-4 text-slate-400" />
+              <span>{networkMessage || 'Clash 端口可填写 http://127.0.0.1:7897。'}</span>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              当前支持 HTTP / Mixed 代理端口；本地 127.0.0.1:8320 的 CPA 同步仍然直连。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onSaveNetwork}
+              disabled={networkBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 text-xs text-white hover:bg-brand-600 disabled:opacity-50 transition"
+            >
+              <Save className="w-3.5 h-3.5" />
+              保存代理
+            </button>
+            <button
+              type="button"
+              onClick={() => setNetworkSettings({ quotaProxyUrl: 'http://127.0.0.1:7897' })}
+              disabled={networkBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition"
+            >
+              使用 Clash 7897
+            </button>
+            <button
+              type="button"
+              onClick={() => setNetworkSettings({ quotaProxyUrl: '' })}
+              disabled={networkBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition"
+            >
+              清空
+            </button>
           </div>
         </CardBody>
       </Card>

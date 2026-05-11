@@ -170,6 +170,11 @@ export interface RemoteSyncStatus {
   codexCachePath: string
 }
 
+export interface NetworkSettings {
+  /** 仅用于 ChatGPT 余量查询的 HTTP/Mixed 代理，例如 http://127.0.0.1:7897。 */
+  quotaProxyUrl: string
+}
+
 export type QuotaAccountGroup = '自己的账号' | '其余来源'
 
 export interface QuotaAccountStatus {
@@ -329,6 +334,12 @@ export interface TokenAPI {
 
   /** 同步远程日志到本地缓存并触发重扫 */
   syncRemoteLogs(): Promise<{ ok: boolean; message: string; syncedAt?: string }>
+
+  /** 获取网络设置。代理只在主进程用于余量查询。 */
+  getNetworkSettings(): Promise<NetworkSettings>
+
+  /** 保存网络设置。 */
+  setNetworkSettings(settings: NetworkSettings): Promise<NetworkSettings>
 
   /** 查询 ChatGPT 5h/7d 余量。token 仅在主进程使用，不返回前端。 */
   getQuotaStatus(force?: boolean): Promise<QuotaStatus>

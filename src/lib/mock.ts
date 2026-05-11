@@ -361,6 +361,12 @@ export const mockAPI: TokenAPI = {
   async syncRemoteLogs() {
     return { ok: false, message: 'Mock 环境不可同步 SSH。' }
   },
+  async getNetworkSettings() {
+    return { quotaProxyUrl: 'http://127.0.0.1:7897' }
+  },
+  async setNetworkSettings(settings) {
+    return settings
+  },
   async getQuotaStatus() {
     return quotaStatus
   },
