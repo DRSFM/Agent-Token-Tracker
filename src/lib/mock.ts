@@ -370,6 +370,12 @@ export const mockAPI: TokenAPI = {
   async getQuotaStatus() {
     return quotaStatus
   },
+  async getQuotaVisibilitySettings() {
+    return { hiddenAccounts: [] }
+  },
+  async setQuotaVisibilitySettings(settings) {
+    return settings
+  },
   async syncQuotaToCpa() {
     return {
       ok: true,

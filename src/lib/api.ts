@@ -59,6 +59,8 @@ export const api: TokenAPI = {
   getNetworkSettings: wrap('getNetworkSettings'),
   setNetworkSettings: wrap('setNetworkSettings'),
   getQuotaStatus: wrap('getQuotaStatus'),
+  getQuotaVisibilitySettings: wrap('getQuotaVisibilitySettings'),
+  setQuotaVisibilitySettings: wrap('setQuotaVisibilitySettings'),
   syncQuotaToCpa: wrap('syncQuotaToCpa'),
   getReplaySession: wrap('getReplaySession'),
   getUpdateSettings: wrap('getUpdateSettings'),

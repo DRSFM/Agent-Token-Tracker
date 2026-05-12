@@ -26,6 +26,8 @@ const api: TokenAPI = {
   getNetworkSettings: () => ipcRenderer.invoke('token:getNetworkSettings'),
   setNetworkSettings: (settings) => ipcRenderer.invoke('token:setNetworkSettings', settings),
   getQuotaStatus: (force) => ipcRenderer.invoke('token:getQuotaStatus', force),
+  getQuotaVisibilitySettings: () => ipcRenderer.invoke('token:getQuotaVisibilitySettings'),
+  setQuotaVisibilitySettings: (settings) => ipcRenderer.invoke('token:setQuotaVisibilitySettings', settings),
   syncQuotaToCpa: () => ipcRenderer.invoke('token:syncQuotaToCpa'),
   getReplaySession: (sessionId, source, options) =>
     ipcRenderer.invoke('token:getReplaySession', sessionId, source, options),

@@ -177,6 +177,10 @@ export interface NetworkSettings {
 
 export type QuotaAccountGroup = '自己的账号' | '其余来源'
 
+export interface QuotaVisibilitySettings {
+  hiddenAccounts: string[]
+}
+
 export interface QuotaAccountStatus {
   timestamp: string
   email: string
@@ -192,6 +196,7 @@ export interface QuotaAccountStatus {
   creditsBalance: string
   accountGroup: QuotaAccountGroup
   error: string
+  hidden?: boolean
 }
 
 export interface QuotaGroupSummary {
@@ -343,6 +348,12 @@ export interface TokenAPI {
 
   /** 查询 ChatGPT 5h/7d 余量。token 仅在主进程使用，不返回前端。 */
   getQuotaStatus(force?: boolean): Promise<QuotaStatus>
+
+  /** 获取余量页账号显示设置。隐藏账号会在刷新时跳过远程额度查询。 */
+  getQuotaVisibilitySettings(): Promise<QuotaVisibilitySettings>
+
+  /** 保存余量页账号显示设置。 */
+  setQuotaVisibilitySettings(settings: QuotaVisibilitySettings): Promise<QuotaVisibilitySettings>
 
   /** 触发后端同步余量到 CPA 路由。只返回数量汇总，不返回敏感原文。 */
   syncQuotaToCpa(): Promise<SyncQuotaToCpaResult>

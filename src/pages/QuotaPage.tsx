@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Clock3,
+  EyeOff,
   LayoutGrid,
   List,
   RefreshCcw,
+  RotateCcw,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -21,6 +23,7 @@ import type {
 } from '@/types/api'
 
 const GROUPS: QuotaAccountGroup[] = ['自己的账号', '其余来源']
+const HIDDEN_QUOTA_ACCOUNTS_STORAGE_KEY = 'agent-token-tracker:hidden-quota-accounts'
 type QuotaScope = 'all' | QuotaAccountGroup
 type QuotaViewMode = 'table' | 'cards'
 
@@ -58,6 +61,29 @@ function formatQuotaError(error: string) {
   if (/missing access_token/i.test(error)) return '额度获取失败：认证文件缺少 access_token'
   if (/timeout/i.test(error)) return '额度获取失败：请求超时，请稍后重试'
   return `额度获取失败：${error}`
+}
+
+function quotaAccountKey(quota: QuotaAccountStatus) {
+  return `${quota.accountGroup}:${quota.email.trim().toLowerCase()}`
+}
+
+function readHiddenQuotaKeys() {
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_QUOTA_ACCOUNTS_STORAGE_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveHiddenQuotaKeys(keys: string[]) {
+  try {
+    window.localStorage.setItem(HIDDEN_QUOTA_ACCOUNTS_STORAGE_KEY, JSON.stringify(keys))
+  } catch {
+    // Keeping the page usable is more important than surfacing storage errors here.
+  }
 }
 
 function QuotaBar({ value, className }: { value: number | null; className?: string }) {
@@ -125,7 +151,15 @@ function StatusPill({ quota }: { quota: QuotaAccountStatus }) {
   )
 }
 
-function GroupTable({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAccountStatus[] }) {
+function GroupTable({
+  group,
+  rows,
+  onHide,
+}: {
+  group: QuotaAccountGroup
+  rows: QuotaAccountStatus[]
+  onHide: (quota: QuotaAccountStatus) => void
+}) {
   return (
     <Card>
       <CardHeader
@@ -145,16 +179,17 @@ function GroupTable({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAcco
             <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-slate-200/70 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                  <th className="w-[32%] py-2 pr-3 font-medium">账号</th>
-                  <th className="w-[13%] py-2 pr-3 font-medium">状态</th>
-                  <th className="w-[15%] py-2 pr-3 font-medium">5h 剩余</th>
-                  <th className="w-[15%] py-2 pr-3 font-medium">7d 剩余</th>
-                  <th className="w-[25%] py-2 font-medium">重置时间</th>
+                  <th className="w-[30%] py-2 pr-3 font-medium">账号</th>
+                  <th className="w-[12%] py-2 pr-3 font-medium">状态</th>
+                  <th className="w-[14%] py-2 pr-3 font-medium">5h 剩余</th>
+                  <th className="w-[14%] py-2 pr-3 font-medium">7d 剩余</th>
+                  <th className="w-[23%] py-2 pr-3 font-medium">重置时间</th>
+                  <th className="w-[7%] py-2 font-medium">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                 {rows.map((quota, index) => (
-                  <tr key={`${quota.accountGroup}:${quota.email}:${index}`} className="align-top">
+                  <tr key={`${quotaAccountKey(quota)}:${index}`} className="align-top">
                     <td className="py-3 pr-3">
                       <div className="truncate font-medium text-slate-700 dark:text-slate-200" title={quota.email}>
                         {quota.email}
@@ -172,7 +207,7 @@ function GroupTable({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAcco
                     <td className="py-3 pr-3">
                       <QuotaBar value={quota.secondaryRemainingPercent} />
                     </td>
-                    <td className="py-3">
+                    <td className="py-3 pr-3">
                       {quota.error ? (
                         <div className="break-words text-xs text-rose-500 dark:text-rose-300">
                           {formatQuotaError(quota.error)}
@@ -183,6 +218,17 @@ function GroupTable({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAcco
                           <div className="text-slate-400">{quota.secondaryResetAt || '未返回'}</div>
                         </div>
                       )}
+                    </td>
+                    <td className="py-3">
+                      <button
+                        type="button"
+                        onClick={() => onHide(quota)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200/70 bg-white/80 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:bg-slate-700"
+                        title="隐藏账号"
+                        aria-label={`隐藏账号 ${quota.email}`}
+                      >
+                        <EyeOff className="h-3.5 w-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -195,7 +241,13 @@ function GroupTable({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAcco
   )
 }
 
-function AccountCard({ quota }: { quota: QuotaAccountStatus }) {
+function AccountCard({
+  quota,
+  onHide,
+}: {
+  quota: QuotaAccountStatus
+  onHide: (quota: QuotaAccountStatus) => void
+}) {
   return (
     <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-4 shadow-sm transition hover:bg-white/90 dark:border-slate-800 dark:bg-slate-900/50 dark:hover:bg-slate-900/70">
       <div className="flex items-start justify-between gap-3">
@@ -214,7 +266,18 @@ function AccountCard({ quota }: { quota: QuotaAccountStatus }) {
             </span>
           </div>
         </div>
-        <StatusPill quota={quota} />
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusPill quota={quota} />
+          <button
+            type="button"
+            onClick={() => onHide(quota)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200/70 bg-white/80 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:bg-slate-700"
+            title="隐藏账号"
+            aria-label={`隐藏账号 ${quota.email}`}
+          >
+            <EyeOff className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 h-8 rounded-xl bg-slate-50/80 px-3 py-2 dark:bg-slate-800/50">
@@ -249,7 +312,15 @@ function AccountCard({ quota }: { quota: QuotaAccountStatus }) {
   )
 }
 
-function GroupCards({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAccountStatus[] }) {
+function GroupCards({
+  group,
+  rows,
+  onHide,
+}: {
+  group: QuotaAccountGroup
+  rows: QuotaAccountStatus[]
+  onHide: (quota: QuotaAccountStatus) => void
+}) {
   return (
     <Card>
       <CardHeader
@@ -267,10 +338,75 @@ function GroupCards({ group, rows }: { group: QuotaAccountGroup; rows: QuotaAcco
         ) : (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
             {rows.map((quota, index) => (
-              <AccountCard key={`${quota.accountGroup}:${quota.email}:${index}`} quota={quota} />
+              <AccountCard key={`${quotaAccountKey(quota)}:${index}`} quota={quota} onHide={onHide} />
             ))}
           </div>
         )}
+      </CardBody>
+    </Card>
+  )
+}
+
+function HiddenAccountsPanel({
+  rows,
+  onRestore,
+}: {
+  rows: QuotaAccountStatus[]
+  onRestore: (quota: QuotaAccountStatus) => void
+}) {
+  if (rows.length === 0) return null
+
+  return (
+    <Card>
+      <CardHeader
+        title="隐藏账号"
+        subtitle={`${rows.length} 个账号`}
+        action={
+          <span className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            <EyeOff className="h-4 w-4" />
+          </span>
+        }
+      />
+      <CardBody className="pt-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+          {rows.map((quota, index) => (
+            <div
+              key={`${quotaAccountKey(quota)}:${index}:hidden`}
+              className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-slate-700 dark:text-slate-200" title={quota.email}>
+                  {quota.email}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {quota.plan && (
+                    <span className="rounded-md bg-brand-500/10 px-1.5 py-0.5 text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
+                      {quota.plan}
+                    </span>
+                  )}
+                  <span className="rounded-md bg-white px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    {quota.accountGroup}
+                  </span>
+                  {quota.error && (
+                    <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-xs text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">
+                      异常
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRestore(quota)}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200/70 bg-white/80 px-2.5 text-xs font-medium text-slate-600 transition hover:bg-white hover:text-slate-800 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
+                title="恢复显示"
+                aria-label={`恢复显示账号 ${quota.email}`}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                恢复
+              </button>
+            </div>
+          ))}
+        </div>
       </CardBody>
     </Card>
   )
@@ -285,6 +421,8 @@ export default function QuotaPage() {
   const [syncResult, setSyncResult] = useState<SyncQuotaToCpaResult | null>(null)
   const [scope, setScope] = useState<QuotaScope>('all')
   const [viewMode, setViewMode] = useState<QuotaViewMode>('cards')
+  const [hiddenQuotaKeys, setHiddenQuotaKeys] = useState<string[]>(readHiddenQuotaKeys)
+  const [visibilityLoaded, setVisibilityLoaded] = useState(false)
 
   const load = useCallback(async (force = false) => {
     if (force) setRefreshing(true)
@@ -306,6 +444,35 @@ export default function QuotaPage() {
     return () => window.clearInterval(interval)
   }, [load])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadVisibilitySettings() {
+      const localKeys = readHiddenQuotaKeys()
+      try {
+        const settings = await api.getQuotaVisibilitySettings()
+        const merged = [...new Set([...settings.hiddenAccounts, ...localKeys])]
+        if (cancelled) return
+        setHiddenQuotaKeys(merged)
+        saveHiddenQuotaKeys(merged)
+        setVisibilityLoaded(true)
+        if (merged.length !== settings.hiddenAccounts.length) {
+          await api.setQuotaVisibilitySettings({ hiddenAccounts: merged })
+          await load(true)
+        }
+      } catch {
+        if (cancelled) return
+        setHiddenQuotaKeys(localKeys)
+        setVisibilityLoaded(true)
+      }
+    }
+
+    loadVisibilitySettings()
+    return () => {
+      cancelled = true
+    }
+  }, [load])
+
   const syncToCpa = useCallback(async () => {
     setSyncing(true)
     setSyncResult(null)
@@ -318,12 +485,48 @@ export default function QuotaPage() {
     }
   }, [load])
 
-  const visibleQuotas = useMemo(
+  const updateHiddenQuotaKeys = useCallback(
+    async (updater: (current: string[]) => string[]) => {
+      const next = updater(hiddenQuotaKeys)
+      setHiddenQuotaKeys(next)
+      saveHiddenQuotaKeys(next)
+      try {
+        await api.setQuotaVisibilitySettings({ hiddenAccounts: next })
+      } finally {
+        await load(true)
+      }
+    },
+    [hiddenQuotaKeys, load],
+  )
+
+  const hideQuota = useCallback((quota: QuotaAccountStatus) => {
+    const key = quotaAccountKey(quota)
+    void updateHiddenQuotaKeys((current) => (current.includes(key) ? current : [...current, key]))
+  }, [updateHiddenQuotaKeys])
+
+  const restoreQuota = useCallback((quota: QuotaAccountStatus) => {
+    const key = quotaAccountKey(quota)
+    void updateHiddenQuotaKeys((current) => current.filter((item) => item !== key))
+  }, [updateHiddenQuotaKeys])
+
+  const hiddenQuotaKeySet = useMemo(() => new Set(hiddenQuotaKeys), [hiddenQuotaKeys])
+
+  const scopedQuotas = useMemo(
     () =>
       (status?.quotas ?? []).filter((quota) =>
         scope === 'all' ? true : quota.accountGroup === scope,
       ),
     [scope, status],
+  )
+
+  const visibleQuotas = useMemo(
+    () => scopedQuotas.filter((quota) => !hiddenQuotaKeySet.has(quotaAccountKey(quota))),
+    [hiddenQuotaKeySet, scopedQuotas],
+  )
+
+  const hiddenQuotas = useMemo(
+    () => scopedQuotas.filter((quota) => hiddenQuotaKeySet.has(quotaAccountKey(quota))),
+    [hiddenQuotaKeySet, scopedQuotas],
   )
 
   const visibleGroups = useMemo(
@@ -342,7 +545,9 @@ export default function QuotaPage() {
     return grouped
   }, [visibleQuotas])
 
+  const scopedTotal = scopedQuotas.length
   const total = visibleQuotas.length
+  const hiddenCount = hiddenQuotas.length
   const available = visibleQuotas.filter((quota) => quota.allowed && !quota.error).length
   const errorCount = visibleQuotas.filter((quota) => Boolean(quota.error)).length
   const min5h = visibleQuotas
@@ -471,7 +676,7 @@ export default function QuotaPage() {
               <CardBody>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">账号总数</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">显示账号</div>
                     <div className="mt-2 text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-50">
                       {total}
                     </div>
@@ -529,7 +734,7 @@ export default function QuotaPage() {
             </Card>
           </div>
 
-          {total === 0 ? (
+          {scopedTotal === 0 ? (
             <Card>
               <EmptyState
                 title="暂无账号"
@@ -540,17 +745,23 @@ export default function QuotaPage() {
                 }
               />
             </Card>
+          ) : total === 0 ? (
+            <Card>
+              <EmptyState title="当前没有显示账号" hint="当前筛选下的账号都在隐藏栏" />
+            </Card>
           ) : (
             <div className="grid grid-cols-1 gap-4">
               {visibleGroups.map((group) => (
                 viewMode === 'cards' ? (
-                  <GroupCards key={group} group={group} rows={byGroup[group]} />
+                  <GroupCards key={group} group={group} rows={byGroup[group]} onHide={hideQuota} />
                 ) : (
-                  <GroupTable key={group} group={group} rows={byGroup[group]} />
+                  <GroupTable key={group} group={group} rows={byGroup[group]} onHide={hideQuota} />
                 )
               ))}
             </div>
           )}
+
+          {hiddenCount > 0 && <HiddenAccountsPanel rows={hiddenQuotas} onRestore={restoreQuota} />}
         </>
       )}
     </div>

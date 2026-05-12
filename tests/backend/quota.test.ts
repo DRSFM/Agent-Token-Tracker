@@ -41,3 +41,29 @@ test('quota plan folders are normalized and auth files move to the matching fold
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test('hidden quota accounts are returned without remote refresh errors', async () => {
+  const root = await tempRoot('agent-token-quota-hidden')
+  try {
+    const groupRoot = path.join(root, '自己的账号')
+    const sourceFile = path.join(groupRoot, 'codex-hidden.json')
+    await fs.mkdir(groupRoot, { recursive: true })
+    await fs.writeFile(sourceFile, JSON.stringify({ email: 'hidden@example.com' }), 'utf8')
+
+    const hiddenKeys = new Set([
+      __quotaTestHooks.quotaAccountKey('自己的账号', 'hidden@example.com'),
+    ])
+    const row = await __quotaTestHooks.refreshRecord(
+      { filePath: sourceFile, accountGroup: '自己的账号', groupRoot },
+      '2026-05-13T00:00:00.000Z',
+      hiddenKeys,
+    )
+
+    assert.equal(row.email, 'hidden@example.com')
+    assert.equal(row.hidden, true)
+    assert.equal(row.error, '')
+    assert.equal(row.primaryRemainingPercent, null)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})

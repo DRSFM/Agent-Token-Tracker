@@ -27,6 +27,7 @@ import {
   setUpdateSettings,
 } from './updater'
 import { getQuotaStatus } from './quota'
+import { getQuotaVisibilitySettings, setQuotaVisibilitySettings } from './quota-visibility'
 import { syncQuotaToCpa } from './cpa-sync'
 import { getNetworkSettings, setNetworkSettings } from './network-settings'
 
@@ -111,6 +112,10 @@ export function registerIpcHandlers() {
   ipcMain.handle('token:setNetworkSettings', async (_e, settings) => setNetworkSettings(settings))
   ipcMain.handle('token:getQuotaStatus', async (_e, force?: boolean) =>
     getQuotaStatus(Boolean(force)),
+  )
+  ipcMain.handle('token:getQuotaVisibilitySettings', async () => getQuotaVisibilitySettings())
+  ipcMain.handle('token:setQuotaVisibilitySettings', async (_e, settings) =>
+    setQuotaVisibilitySettings(settings),
   )
   ipcMain.handle('token:syncQuotaToCpa', async () => syncQuotaToCpa())
 

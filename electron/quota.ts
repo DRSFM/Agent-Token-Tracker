@@ -11,6 +11,7 @@ import type {
   QuotaStatus,
 } from '../src/types/api'
 import { getNetworkSettings } from './network-settings'
+import { getQuotaVisibilitySettings } from './quota-visibility'
 
 const ACCOUNT_GROUPS: QuotaAccountGroup[] = ['自己的账号', '其余来源']
 const DEFAULT_AUTH_DIR = path.join(os.homedir(), '.cli-proxy-api')
@@ -145,6 +146,10 @@ function fallbackEmail(filePath: string) {
 
 function normalizedPath(value: string) {
   return path.normalize(value).toLowerCase()
+}
+
+function quotaAccountKey(accountGroup: QuotaAccountGroup, email: string) {
+  return `${accountGroup}:${email.trim().toLowerCase()}`
 }
 
 function normalizePlanFolder(plan: string): QuotaPlanFolder | null {
@@ -334,11 +339,43 @@ function errorRow(record: AuthRecord, email: string, error: unknown, timestamp: 
   }
 }
 
-async function refreshRecord(record: AuthRecord, timestamp: string): Promise<QuotaAccountStatus> {
+function hiddenRow(record: AuthRecord, email: string, timestamp: string): QuotaAccountStatus {
+  return {
+    timestamp,
+    email,
+    plan: '',
+    allowed: false,
+    limitReached: false,
+    primaryUsedPercent: null,
+    primaryRemainingPercent: null,
+    primaryResetAt: '',
+    secondaryUsedPercent: null,
+    secondaryRemainingPercent: null,
+    secondaryResetAt: '',
+    creditsBalance: '',
+    accountGroup: record.accountGroup,
+    error: '',
+    hidden: true,
+  }
+}
+
+async function refreshRecord(
+  record: AuthRecord,
+  timestamp: string,
+  hiddenAccountKeys: Set<string>,
+): Promise<QuotaAccountStatus> {
   let email = fallbackEmail(record.filePath)
+  if (hiddenAccountKeys.has(quotaAccountKey(record.accountGroup, email))) {
+    return hiddenRow(record, email, timestamp)
+  }
+
   try {
     const auth = JSON.parse(await fs.readFile(record.filePath, 'utf8')) as AuthFile
     email = auth.email || email
+    if (hiddenAccountKeys.has(quotaAccountKey(record.accountGroup, email))) {
+      return hiddenRow(record, email, timestamp)
+    }
+
     const token = auth.access_token
     if (!token) throw new Error('missing access_token')
 
@@ -395,7 +432,9 @@ function summarizeGroups(quotas: QuotaAccountStatus[]): QuotaGroupSummary[] {
 async function refreshQuotaStatus(): Promise<QuotaStatus> {
   const timestamp = new Date().toISOString()
   const records = await authFileRecords()
-  const quotas = await Promise.all(records.map((record) => refreshRecord(record, timestamp)))
+  const visibility = await getQuotaVisibilitySettings()
+  const hiddenAccountKeys = new Set(visibility.hiddenAccounts)
+  const quotas = await Promise.all(records.map((record) => refreshRecord(record, timestamp, hiddenAccountKeys)))
   return {
     quotas,
     groups: summarizeGroups(quotas),
@@ -427,5 +466,7 @@ export async function getQuotaStatus(force = false): Promise<QuotaStatus> {
 export const __quotaTestHooks = {
   ensurePlanFolders,
   moveAuthFileToPlanFolder,
+  quotaAccountKey,
   normalizePlanFolder,
+  refreshRecord,
 }
