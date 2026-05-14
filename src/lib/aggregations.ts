@@ -6,6 +6,7 @@ import type {
   ModelShare,
   RequestRecord,
 } from '@/types/api'
+import { estimateRequestValue } from '@/lib/pricing'
 
 export const SOURCE_LABEL: Record<AgentSource, string> = {
   'claude-code': 'Claude Code',
@@ -35,6 +36,27 @@ export const lastNDays = (days: number): RangeOpt => {
   return { fromMs: start.getTime(), toMs: end.getTime() }
 }
 
+export const allTimeRange = (records: RequestRecord[]): RangeOpt => {
+  const times = records
+    .map((record) => new Date(record.timestamp).getTime())
+    .filter(Number.isFinite)
+  if (!times.length) return lastNDays(1)
+
+  const start = new Date(Math.min(...times))
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(Math.max(...times))
+  end.setHours(23, 59, 59, 999)
+  return { fromMs: start.getTime(), toMs: end.getTime() }
+}
+
+export const rangeDayCount = (range: RangeOpt) => {
+  const start = new Date(range.fromMs)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(range.toMs)
+  end.setHours(0, 0, 0, 0)
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1)
+}
+
 /** 在 RangeOpt 之前的同长度区间，用于做对比 */
 export const previousRange = (range: RangeOpt): RangeOpt => {
   const span = range.toMs - range.fromMs + 1
@@ -61,6 +83,13 @@ export interface SessionAggregate {
   inputTokens: number
   outputTokens: number
   cacheTokens: number
+  estimatedValueUsd: number
+  cachedValueUsd: number
+  nonCachedValueUsd: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  pricedRequestCount: number
+  unpricedRequestCount: number
   requestCount: number
   models: { model: string; tokens: number; count: number }[]
   firstActiveAt: string
@@ -80,6 +109,13 @@ export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] 
         inputTokens: 0,
         outputTokens: 0,
         cacheTokens: 0,
+        estimatedValueUsd: 0,
+        cachedValueUsd: 0,
+        nonCachedValueUsd: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        pricedRequestCount: 0,
+        unpricedRequestCount: 0,
         requestCount: 0,
         models: [],
         firstActiveAt: r.timestamp,
@@ -91,6 +127,14 @@ export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] 
     agg.inputTokens += r.inputTokens
     agg.outputTokens += r.outputTokens
     agg.cacheTokens += r.cacheTokens ?? 0
+    const estimatedValue = estimateRequestValue(r)
+    agg.estimatedValueUsd += estimatedValue.totalUsd
+    agg.cachedValueUsd += estimatedValue.cachedUsd
+    agg.nonCachedValueUsd += estimatedValue.nonCachedUsd
+    agg.cacheReadTokens += estimatedValue.cacheReadTokens
+    agg.cacheWriteTokens += estimatedValue.cacheWriteTokens
+    if (estimatedValue.priced) agg.pricedRequestCount += 1
+    else agg.unpricedRequestCount += 1
     agg.requestCount += 1
     if (new Date(r.timestamp) > new Date(agg.lastActiveAt)) agg.lastActiveAt = r.timestamp
     if (new Date(r.timestamp) < new Date(agg.firstActiveAt)) agg.firstActiveAt = r.timestamp

@@ -46,7 +46,13 @@ export default function TrendsPage() {
             长周期 Token 走势、来源对比与时段分布
           </p>
         </div>
-        <RangeSelect value={days} onChange={setDays} options={RANGE_OPTIONS} />
+        <RangeSelect
+          value={days}
+          onChange={(value) => {
+            if (typeof value === 'number') setDays(value)
+          }}
+          options={RANGE_OPTIONS}
+        />
       </div>
 
       {error ? (

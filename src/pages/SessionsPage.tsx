@@ -1,30 +1,44 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowDownWideNarrow, Clock3, Hash, Search, X } from 'lucide-react'
+import { ArrowDownWideNarrow, Clock3, Database, DollarSign, Hash, Search, X } from 'lucide-react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
-import { RangeSelect } from '@/components/filters/RangeSelect'
+import { RangeSelect, type RangeSelectValue } from '@/components/filters/RangeSelect'
 import { SourceTabs, type SourceFilter } from '@/components/filters/SourceTabs'
 import { SessionList, type SessionSortKey } from '@/components/sessions/SessionList'
 import { SessionDetail } from '@/components/sessions/SessionDetail'
 import { useAllRequests } from '@/hooks/useAllRequests'
 import {
   aggregateSessions,
+  allTimeRange,
   inRange,
   lastNDays,
+  rangeDayCount,
   type SessionAggregate,
 } from '@/lib/aggregations'
-import { formatNumber } from '@/lib/format'
+import { estimateRecordsValue } from '@/lib/pricing'
+import { formatNumber, formatUsd } from '@/lib/format'
 import { LoadingState, EmptyState, ErrorState } from '@/components/ui/states'
 import { cn } from '@/lib/utils'
 
 const SORT_OPTIONS = [
   { key: 'tokens', label: 'Tokens', icon: ArrowDownWideNarrow },
+  { key: 'cache', label: '缓存', icon: Database },
   { key: 'requests', label: '请求', icon: Hash },
+  { key: 'cost', label: '计费', icon: DollarSign },
   { key: 'lastActive', label: '最近', icon: Clock3 },
 ] satisfies { key: SessionSortKey; label: string; icon: typeof ArrowDownWideNarrow }[]
 
+const RANGE_OPTIONS = [
+  { value: '7', label: '最近 7 天' },
+  { value: '14', label: '最近 14 天' },
+  { value: '30', label: '最近 30 天' },
+  { value: '60', label: '最近 60 天' },
+  { value: '90', label: '最近 90 天' },
+  { value: 'all', label: '全部' },
+]
+
 export default function SessionsPage() {
-  const [days, setDays] = useState(30)
+  const [rangeValue, setRangeValue] = useState<RangeSelectValue>(30)
   const [source, setSource] = useState<SourceFilter>('all')
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '')
@@ -52,7 +66,10 @@ export default function SessionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
-  const range = useMemo(() => lastNDays(days), [days])
+  const range = useMemo(
+    () => (rangeValue === 'all' ? allTimeRange(data ?? []) : lastNDays(rangeValue)),
+    [data, rangeValue],
+  )
   const visibleRecords = useMemo(() => {
     if (!data) return []
     const ranged = data.filter((r) => inRange(r, range))
@@ -73,7 +90,9 @@ export default function SessionsPage() {
     aggs.sort((a, b) => {
       const dir = sortDesc ? -1 : 1
       if (sortKey === 'tokens') return dir * (a.totalTokens - b.totalTokens)
+      if (sortKey === 'cache') return dir * (a.cacheTokens - b.cacheTokens)
       if (sortKey === 'requests') return dir * (a.requestCount - b.requestCount)
+      if (sortKey === 'cost') return dir * (a.estimatedValueUsd - b.estimatedValueUsd)
       return dir * (new Date(a.lastActiveAt).getTime() - new Date(b.lastActiveAt).getTime())
     })
     return aggs
@@ -81,14 +100,22 @@ export default function SessionsPage() {
 
   const summary = useMemo(() => {
     const totalTokens = sessions.reduce((s, x) => s + x.totalTokens, 0)
+    const cacheTokens = sessions.reduce((s, x) => s + x.cacheTokens, 0)
     const totalRequests = sessions.reduce((s, x) => s + x.requestCount, 0)
+    const estimatedValue = estimateRecordsValue(visibleRecords)
+    const daysInRange = rangeDayCount(range)
     return {
       sessionCount: sessions.length,
       totalTokens,
+      cacheTokens,
       totalRequests,
-      avgPerSession: sessions.length ? Math.round(totalTokens / sessions.length) : 0,
+      estimatedValueUsd: estimatedValue.totalUsd,
+      cachedValueUsd: estimatedValue.cachedUsd,
+      nonCachedValueUsd: estimatedValue.nonCachedUsd,
+      dailyEstimatedValueUsd: estimatedValue.totalUsd / daysInRange,
+      unpricedRequests: estimatedValue.unpricedRequests,
     }
-  }, [sessions])
+  }, [range, sessions, visibleRecords])
 
   const selected = sessions.find((s) => s.sessionId === selectedId) ?? null
 
@@ -116,17 +143,26 @@ export default function SessionsPage() {
         </div>
         <div className="flex items-center gap-2">
           <SourceTabs value={source} onChange={setSource} />
-          <RangeSelect value={days} onChange={setDays} />
+          <RangeSelect value={rangeValue} onChange={setRangeValue} options={RANGE_OPTIONS} />
         </div>
       </div>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
         <SummaryTile label="会话数" value={summary.sessionCount} />
         <SummaryTile label="总 Tokens" value={summary.totalTokens} />
+        <SummaryTile label="缓存 Tokens" value={summary.cacheTokens} />
         <SummaryTile label="总请求" value={summary.totalRequests} />
-        <SummaryTile label="平均/会话" value={summary.avgPerSession} />
+        <SummaryTile label="缓存计费" value={summary.cachedValueUsd} format="usd" />
+        <SummaryTile label="非缓存计费" value={summary.nonCachedValueUsd} format="usd" />
+        <SummaryTile label="总计费" value={summary.estimatedValueUsd} format="usd" />
+        <SummaryTile label="日均计费" value={summary.dailyEstimatedValueUsd} format="usd" />
       </div>
+      {summary.unpricedRequests > 0 && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          预估价值仅统计已内置价格的模型，未计价请求 {formatNumber(summary.unpricedRequests)} 条。
+        </div>
+      )}
 
       {/* Two-column: list + detail */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -210,12 +246,20 @@ export default function SessionsPage() {
   )
 }
 
-function SummaryTile({ label, value }: { label: string; value: number }) {
+function SummaryTile({
+  label,
+  value,
+  format = 'number',
+}: {
+  label: string
+  value: number
+  format?: 'number' | 'usd'
+}) {
   return (
     <div className="rounded-xl bg-white/90 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 backdrop-blur-md shadow-card dark:shadow-card-dark px-4 py-3">
       <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
       <div className="mt-1 text-xl font-bold text-slate-800 dark:text-slate-100 tabular-nums">
-        {formatNumber(value)}
+        {format === 'usd' ? formatUsd(value) : formatNumber(value)}
       </div>
     </div>
   )

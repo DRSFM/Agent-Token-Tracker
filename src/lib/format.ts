@@ -1,5 +1,14 @@
 export const formatNumber = (n: number) => n.toLocaleString('zh-CN')
 
+export const formatUsd = (n: number) => {
+  if (!Number.isFinite(n) || n <= 0) return '$0.00'
+  if (n < 0.01) return '< $0.01'
+  return `$${n.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
 export const formatCompact = (n: number) => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${Math.round(n / 1000)}K`

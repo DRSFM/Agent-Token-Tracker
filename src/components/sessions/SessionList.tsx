@@ -1,10 +1,10 @@
 import type { SessionAggregate } from '@/lib/aggregations'
-import { formatNumber, formatRelativeMinutes } from '@/lib/format'
+import { formatNumber, formatRelativeMinutes, formatUsd } from '@/lib/format'
 import { SourceBadge } from '@/components/filters/SourceBadge'
 import { cn } from '@/lib/utils'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 
-export type SessionSortKey = 'tokens' | 'requests' | 'lastActive'
+export type SessionSortKey = 'tokens' | 'cache' | 'requests' | 'cost' | 'lastActive'
 
 interface Props {
   rows: SessionAggregate[]
@@ -20,6 +20,8 @@ const HEADERS: { key: SessionSortKey | 'title' | 'source'; label: string; align?
   { key: 'source', label: '来源', width: 'w-28 shrink-0' },
   { key: 'requests', label: '请求', align: 'right', width: 'w-20 shrink-0' },
   { key: 'tokens', label: 'Tokens', align: 'right', width: 'w-28 shrink-0' },
+  { key: 'cache', label: '缓存', align: 'right', width: 'w-24 shrink-0' },
+  { key: 'cost', label: '计费', align: 'right', width: 'w-24 shrink-0' },
   { key: 'lastActive', label: '最后活跃', align: 'right', width: 'w-24 shrink-0' },
 ]
 
@@ -30,7 +32,7 @@ export function SessionList({ rows, sortKey, sortDesc, onSort, selectedId, onSel
     <div className="text-sm">
       <div className="flex items-center gap-3 px-3 py-2 text-xs text-slate-400 border-b border-slate-100 dark:border-slate-800">
         {HEADERS.map((h) => {
-          const sortable = h.key === 'tokens' || h.key === 'requests' || h.key === 'lastActive'
+          const sortable = h.key === 'tokens' || h.key === 'cache' || h.key === 'requests' || h.key === 'cost' || h.key === 'lastActive'
           const active = sortKey === h.key
           return (
             <div
@@ -77,6 +79,12 @@ export function SessionList({ rows, sortKey, sortDesc, onSort, selectedId, onSel
               </div>
               <div className="w-28 shrink-0 text-right tabular-nums text-slate-800 dark:text-slate-100 font-medium">
                 {formatNumber(s.totalTokens)}
+              </div>
+              <div className="w-24 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
+                {formatNumber(s.cacheTokens)}
+              </div>
+              <div className="w-24 shrink-0 text-right tabular-nums text-slate-700 dark:text-slate-200 text-xs font-medium">
+                {formatUsd(s.estimatedValueUsd)}
               </div>
               <div className="w-24 shrink-0 text-right text-xs text-slate-500 dark:text-slate-400">
                 {formatRelativeMinutes(s.lastActiveAt)}

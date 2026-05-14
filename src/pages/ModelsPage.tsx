@@ -41,7 +41,9 @@ export default function ModelsPage() {
             按模型聚合的使用情况、占比与趋势
           </p>
         </div>
-        <RangeSelect value={days} onChange={setDays} />
+        <RangeSelect value={days} onChange={(value) => {
+          if (typeof value === 'number') setDays(value)
+        }} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

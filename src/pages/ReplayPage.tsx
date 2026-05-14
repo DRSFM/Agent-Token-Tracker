@@ -213,7 +213,9 @@ export default function ReplayPage() {
         </div>
         <div className="flex items-center gap-2">
           <SourceTabs value={source} onChange={setSource} />
-          <RangeSelect value={days} onChange={setDays} />
+          <RangeSelect value={days} onChange={(value) => {
+            if (typeof value === 'number') setDays(value)
+          }} />
         </div>
       </div>
 
