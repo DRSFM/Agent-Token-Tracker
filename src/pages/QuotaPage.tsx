@@ -64,6 +64,7 @@ function formatQuotaError(error: string) {
 }
 
 function quotaAccountKey(quota: QuotaAccountStatus) {
+  if (quota.visibilityKey) return quota.visibilityKey
   return `${quota.accountGroup}:${quota.email.trim().toLowerCase()}`
 }
 

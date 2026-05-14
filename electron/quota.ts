@@ -19,8 +19,12 @@ const DEFAULT_CONFIG_DIR = path.join(DEFAULT_AUTH_DIR, 'usage-dashboard')
 const EXTRA_AUTH_DIRS = ['F:\\vscode代码\\cpa凭证学习']
 const QUOTA_URL = 'https://chatgpt.com/backend-api/wham/usage'
 const REFRESH_MS = 60_000
-const PLAN_FOLDERS = ['free', 'plus', 'pro5x', 'pro20x'] as const
+const PLAN_FOLDERS = ['free', 'plus', 'pro5x', 'pro20x', 'business'] as const
 const PLAN_FOLDER_SET = new Set<string>(PLAN_FOLDERS)
+const PLAN_FOLDER_ALIASES: Record<string, QuotaPlanFolder> = {
+  bussiness: 'business',
+  chatgptbusiness: 'business',
+}
 
 type QuotaPlanFolder = (typeof PLAN_FOLDERS)[number]
 
@@ -88,7 +92,11 @@ async function resolveAuthDirs() {
     .map(([, dir]) => dir)
 }
 
-async function walkAuthFiles(root: string, accountGroup: QuotaAccountGroup): Promise<AuthRecord[]> {
+async function walkAuthFiles(
+  root: string,
+  accountGroup: QuotaAccountGroup,
+  groupRoot = root,
+): Promise<AuthRecord[]> {
   if (!(await pathExists(root))) return []
 
   const records: AuthRecord[] = []
@@ -97,11 +105,11 @@ async function walkAuthFiles(root: string, accountGroup: QuotaAccountGroup): Pro
     entries.map(async (entry) => {
       const child = path.join(root, entry.name)
       if (entry.isDirectory()) {
-        records.push(...(await walkAuthFiles(child, accountGroup)))
+        records.push(...(await walkAuthFiles(child, accountGroup, groupRoot)))
         return
       }
       if (entry.isFile() && /^codex-.*\.json$/i.test(entry.name)) {
-        records.push({ filePath: child, accountGroup, groupRoot: root })
+        records.push({ filePath: child, accountGroup, groupRoot })
       }
     }),
   )
@@ -113,10 +121,14 @@ async function ensurePlanFolders(groupRoot: string) {
   await Promise.all(PLAN_FOLDERS.map((planFolder) => fs.mkdir(path.join(groupRoot, planFolder), { recursive: true })))
 }
 
+function inferPlanFolderFromFileName(filePath: string): QuotaPlanFolder | null {
+  return /^codex-[a-z0-9]{6,64}-.+@.+\.json$/i.test(path.basename(filePath)) ? 'business' : null
+}
+
 async function scanGroupAuthFiles(authDir: string, accountGroup: QuotaAccountGroup) {
   const groupRoot = path.join(authDir, accountGroup)
   await ensurePlanFolders(groupRoot)
-  return walkAuthFiles(groupRoot, accountGroup)
+  return walkAuthFiles(groupRoot, accountGroup, groupRoot)
 }
 
 async function authFileRecords() {
@@ -136,10 +148,13 @@ async function authFileRecords() {
 }
 
 function fallbackEmail(filePath: string) {
+  const businessEmail = /^codex-[a-z0-9]{6,64}-(.+@.+)\.json$/i.exec(path.basename(filePath))?.[1]
+  if (businessEmail) return businessEmail
+
   return path
     .basename(filePath)
     .replace(/^codex-/i, '')
-    .replace(/-(free|plus|pro5x|pro20x)\.json$/i, '')
+    .replace(/-(free|plus|pro5x|pro20x|business|bussiness)\.json$/i, '')
     .replace(/-plus\.json$/i, '')
     .replace(/\.json$/i, '')
 }
@@ -148,12 +163,15 @@ function normalizedPath(value: string) {
   return path.normalize(value).toLowerCase()
 }
 
-function quotaAccountKey(accountGroup: QuotaAccountGroup, email: string) {
-  return `${accountGroup}:${email.trim().toLowerCase()}`
+function quotaAccountKey(record: AuthRecord) {
+  const relativePath = path.relative(record.groupRoot, record.filePath) || path.basename(record.filePath)
+  const sourceKey = relativePath.split(path.sep).join('/').trim().toLowerCase()
+  return `${record.accountGroup}:${sourceKey}`
 }
 
 function normalizePlanFolder(plan: string): QuotaPlanFolder | null {
   const normalized = plan.trim().toLowerCase().replace(/[\s_-]+/g, '')
+  if (PLAN_FOLDER_ALIASES[normalized]) return PLAN_FOLDER_ALIASES[normalized]
   return PLAN_FOLDER_SET.has(normalized) ? (normalized as QuotaPlanFolder) : null
 }
 
@@ -171,7 +189,7 @@ async function nextAvailablePath(targetPath: string) {
 }
 
 async function moveAuthFileToPlanFolder(record: AuthRecord, plan: string) {
-  const planFolder = normalizePlanFolder(plan)
+  const planFolder = normalizePlanFolder(plan) || inferPlanFolderFromFileName(record.filePath)
   if (!planFolder) return record.filePath
 
   const targetDir = path.join(record.groupRoot, planFolder)
@@ -323,6 +341,7 @@ function errorRow(record: AuthRecord, email: string, error: unknown, timestamp: 
   const message = error instanceof Error ? error.message : String(error)
   return {
     timestamp,
+    visibilityKey: quotaAccountKey(record),
     email,
     plan: '',
     allowed: false,
@@ -342,6 +361,7 @@ function errorRow(record: AuthRecord, email: string, error: unknown, timestamp: 
 function hiddenRow(record: AuthRecord, email: string, timestamp: string): QuotaAccountStatus {
   return {
     timestamp,
+    visibilityKey: quotaAccountKey(record),
     email,
     plan: '',
     allowed: false,
@@ -365,16 +385,20 @@ async function refreshRecord(
   hiddenAccountKeys: Set<string>,
 ): Promise<QuotaAccountStatus> {
   let email = fallbackEmail(record.filePath)
-  if (hiddenAccountKeys.has(quotaAccountKey(record.accountGroup, email))) {
+  const visibilityKey = quotaAccountKey(record)
+  if (hiddenAccountKeys.has(visibilityKey)) {
+    try {
+      const auth = JSON.parse(await fs.readFile(record.filePath, 'utf8')) as AuthFile
+      email = auth.email || email
+    } catch {
+      // Hidden accounts should not surface local file parse errors as quota failures.
+    }
     return hiddenRow(record, email, timestamp)
   }
 
   try {
     const auth = JSON.parse(await fs.readFile(record.filePath, 'utf8')) as AuthFile
     email = auth.email || email
-    if (hiddenAccountKeys.has(quotaAccountKey(record.accountGroup, email))) {
-      return hiddenRow(record, email, timestamp)
-    }
 
     const token = auth.access_token
     if (!token) throw new Error('missing access_token')
@@ -388,6 +412,7 @@ async function refreshRecord(
 
     const status: QuotaAccountStatus = {
       timestamp,
+      visibilityKey,
       email,
       plan: data.plan_type || '',
       allowed: Boolean(rateLimit.allowed),
@@ -468,5 +493,8 @@ export const __quotaTestHooks = {
   moveAuthFileToPlanFolder,
   quotaAccountKey,
   normalizePlanFolder,
+  inferPlanFolderFromFileName,
+  fallbackEmail,
   refreshRecord,
+  walkAuthFiles,
 }

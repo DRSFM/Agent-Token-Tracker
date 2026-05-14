@@ -183,6 +183,8 @@ export interface QuotaVisibilitySettings {
 
 export interface QuotaAccountStatus {
   timestamp: string
+  /** Stable key for hiding/restoring one auth JSON without affecting same-email accounts. */
+  visibilityKey?: string
   email: string
   plan: string
   allowed: boolean
