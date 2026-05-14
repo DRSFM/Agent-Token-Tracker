@@ -130,7 +130,9 @@ test('scanCodex uses last_token_usage total tokens and ignores cumulative totals
     assert.equal(result.records[0].inputTokens, 10)
     assert.equal(result.records[0].outputTokens, 25)
     assert.equal(result.records[0].cacheTokens, 4)
-    assert.equal(result.records[0].totalTokens, 35)
+    assert.equal(result.records[0].rawTotalTokens, 35)
+    assert.equal(result.records[0].weightedTotalTokens, 31)
+    assert.equal(result.records[0].totalTokens, 31)
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
@@ -280,7 +282,7 @@ test('readCodexReplay reconstructs basic message and token events', async () => 
     assert.equal(events.some((event) => event.role === 'assistant' && event.content === '我会检查代码。'), true)
     const usage = events.find((event) => event.type === 'token_usage')
     assert.equal(usage?.model, 'gpt-5.4')
-    assert.equal(usage?.totalTokens, 35)
+    assert.equal(usage?.totalTokens, 32)
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

@@ -15,10 +15,11 @@ interface Props {
 export function ModelTable({ shares, records, range }: Props) {
   return (
     <div className="text-sm">
-      <div className="grid grid-cols-[2fr_60px_100px_80px_70px_120px] items-center gap-3 px-3 py-2 text-xs text-slate-400 border-b border-slate-100 dark:border-slate-800">
+      <div className="grid grid-cols-[2fr_60px_100px_100px_80px_70px_120px] items-center gap-3 px-3 py-2 text-xs text-slate-400 border-b border-slate-100 dark:border-slate-800">
         <div>模型</div>
         <div className="text-right">请求</div>
-        <div className="text-right">Tokens</div>
+        <div className="text-right">原始 Tokens</div>
+        <div className="text-right">计权 Tokens</div>
         <div className="text-right">平均</div>
         <div className="text-right">占比</div>
         <div className="text-right pr-1">趋势</div>
@@ -32,7 +33,7 @@ export function ModelTable({ shares, records, range }: Props) {
             <li
               key={s.model}
               className={cn(
-                'grid grid-cols-[2fr_60px_100px_80px_70px_120px] items-center gap-3 px-3 py-2.5 rounded-lg',
+                'grid grid-cols-[2fr_60px_100px_100px_80px_70px_120px] items-center gap-3 px-3 py-2.5 rounded-lg',
                 'hover:bg-slate-50 dark:hover:bg-slate-800/40 transition',
               )}
             >
@@ -45,6 +46,9 @@ export function ModelTable({ shares, records, range }: Props) {
               </div>
               <div className="text-right tabular-nums text-slate-800 dark:text-slate-100 font-medium">
                 {formatNumber(s.totalTokens)}
+              </div>
+              <div className="text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
+                {formatNumber(s.weightedTotalTokens ?? s.totalTokens)}
               </div>
               <div className="text-right tabular-nums text-slate-500 dark:text-slate-400 text-xs">
                 {formatNumber(avg)}

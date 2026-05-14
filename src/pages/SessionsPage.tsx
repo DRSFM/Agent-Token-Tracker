@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 
 const SORT_OPTIONS = [
   { key: 'tokens', label: 'Tokens', icon: ArrowDownWideNarrow },
+  { key: 'weighted', label: '计权', icon: ArrowDownWideNarrow },
   { key: 'cache', label: '缓存', icon: Database },
   { key: 'requests', label: '请求', icon: Hash },
   { key: 'cost', label: '计费', icon: DollarSign },
@@ -89,7 +90,8 @@ export default function SessionsPage() {
     }
     aggs.sort((a, b) => {
       const dir = sortDesc ? -1 : 1
-      if (sortKey === 'tokens') return dir * (a.totalTokens - b.totalTokens)
+      if (sortKey === 'tokens') return dir * (a.rawTotalTokens - b.rawTotalTokens)
+      if (sortKey === 'weighted') return dir * (a.weightedTotalTokens - b.weightedTotalTokens)
       if (sortKey === 'cache') return dir * (a.cacheTokens - b.cacheTokens)
       if (sortKey === 'requests') return dir * (a.requestCount - b.requestCount)
       if (sortKey === 'cost') return dir * (a.estimatedValueUsd - b.estimatedValueUsd)
@@ -99,7 +101,8 @@ export default function SessionsPage() {
   }, [visibleRecords, search, sortKey, sortDesc])
 
   const summary = useMemo(() => {
-    const totalTokens = sessions.reduce((s, x) => s + x.totalTokens, 0)
+    const totalTokens = sessions.reduce((s, x) => s + x.rawTotalTokens, 0)
+    const weightedTokens = sessions.reduce((s, x) => s + x.weightedTotalTokens, 0)
     const cacheTokens = sessions.reduce((s, x) => s + x.cacheTokens, 0)
     const totalRequests = sessions.reduce((s, x) => s + x.requestCount, 0)
     const estimatedValue = estimateRecordsValue(visibleRecords)
@@ -107,6 +110,7 @@ export default function SessionsPage() {
     return {
       sessionCount: sessions.length,
       totalTokens,
+      weightedTokens,
       cacheTokens,
       totalRequests,
       estimatedValueUsd: estimatedValue.totalUsd,
@@ -148,9 +152,10 @@ export default function SessionsPage() {
       </div>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-9 gap-3">
         <SummaryTile label="会话数" value={summary.sessionCount} />
-        <SummaryTile label="总 Tokens" value={summary.totalTokens} />
+        <SummaryTile label="原始 Tokens" value={summary.totalTokens} />
+        <SummaryTile label="计权 Tokens" value={summary.weightedTokens} />
         <SummaryTile label="缓存 Tokens" value={summary.cacheTokens} />
         <SummaryTile label="总请求" value={summary.totalRequests} />
         <SummaryTile label="缓存计费" value={summary.cachedValueUsd} format="usd" />

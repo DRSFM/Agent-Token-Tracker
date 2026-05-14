@@ -111,7 +111,9 @@ export function estimateRequestValue(record: RequestRecord): EstimatedRequestVal
     }
   }
 
-  const hasSeparateCacheCounters = record.cacheReadTokens !== undefined || record.cacheCreationTokens !== undefined
+  const hasSeparateCacheCounters =
+    record.source === 'claude-code' &&
+    (record.cacheReadTokens !== undefined || record.cacheCreationTokens !== undefined)
   const cacheReadTokens = hasSeparateCacheCounters
     ? Math.max(record.cacheReadTokens ?? 0, 0)
     : Math.min(Math.max(record.cacheTokens ?? 0, 0), Math.max(record.inputTokens, 0))

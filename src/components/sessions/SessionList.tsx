@@ -4,7 +4,7 @@ import { SourceBadge } from '@/components/filters/SourceBadge'
 import { cn } from '@/lib/utils'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 
-export type SessionSortKey = 'tokens' | 'cache' | 'requests' | 'cost' | 'lastActive'
+export type SessionSortKey = 'tokens' | 'weighted' | 'cache' | 'requests' | 'cost' | 'lastActive'
 
 interface Props {
   rows: SessionAggregate[]
@@ -19,20 +19,21 @@ const HEADERS: { key: SessionSortKey | 'title' | 'source'; label: string; align?
   { key: 'title', label: '会话', width: 'flex-1 min-w-0' },
   { key: 'source', label: '来源', width: 'w-28 shrink-0' },
   { key: 'requests', label: '请求', align: 'right', width: 'w-20 shrink-0' },
-  { key: 'tokens', label: 'Tokens', align: 'right', width: 'w-28 shrink-0' },
+  { key: 'tokens', label: '原始', align: 'right', width: 'w-28 shrink-0' },
+  { key: 'weighted', label: '计权', align: 'right', width: 'w-24 shrink-0' },
   { key: 'cache', label: '缓存', align: 'right', width: 'w-24 shrink-0' },
   { key: 'cost', label: '计费', align: 'right', width: 'w-24 shrink-0' },
   { key: 'lastActive', label: '最后活跃', align: 'right', width: 'w-24 shrink-0' },
 ]
 
 export function SessionList({ rows, sortKey, sortDesc, onSort, selectedId, onSelect }: Props) {
-  const max = Math.max(...rows.map((r) => r.totalTokens), 1)
+  const max = Math.max(...rows.map((r) => r.rawTotalTokens), 1)
 
   return (
     <div className="text-sm">
       <div className="flex items-center gap-3 px-3 py-2 text-xs text-slate-400 border-b border-slate-100 dark:border-slate-800">
         {HEADERS.map((h) => {
-          const sortable = h.key === 'tokens' || h.key === 'cache' || h.key === 'requests' || h.key === 'cost' || h.key === 'lastActive'
+          const sortable = h.key === 'tokens' || h.key === 'weighted' || h.key === 'cache' || h.key === 'requests' || h.key === 'cost' || h.key === 'lastActive'
           const active = sortKey === h.key
           return (
             <div
@@ -67,7 +68,7 @@ export function SessionList({ rows, sortKey, sortDesc, onSort, selectedId, onSel
                 <div className="mt-1 h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full"
-                    style={{ width: `${(s.totalTokens / max) * 100}%` }}
+                    style={{ width: `${(s.rawTotalTokens / max) * 100}%` }}
                   />
                 </div>
               </div>
@@ -78,7 +79,10 @@ export function SessionList({ rows, sortKey, sortDesc, onSort, selectedId, onSel
                 {formatNumber(s.requestCount)}
               </div>
               <div className="w-28 shrink-0 text-right tabular-nums text-slate-800 dark:text-slate-100 font-medium">
-                {formatNumber(s.totalTokens)}
+                {formatNumber(s.rawTotalTokens)}
+              </div>
+              <div className="w-24 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
+                {formatNumber(s.weightedTotalTokens)}
               </div>
               <div className="w-24 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
                 {formatNumber(s.cacheTokens)}

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Braces, Clock3, GripVertical, Hash, Maximize2, MessageSquare, Minimize2, Search, X } from 'lucide-react'
-import { RangeSelect } from '@/components/filters/RangeSelect'
+import { RangeSelect, type RangeSelectValue } from '@/components/filters/RangeSelect'
 import { SourceTabs, type SourceFilter } from '@/components/filters/SourceTabs'
 import { SourceBadge } from '@/components/filters/SourceBadge'
 import { ConversationEventList } from '@/components/replay/ConversationView'
 import { OpenAIMessageList, flattenEventForSearch } from '@/components/replay/OpenAIMessageView'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
 import { useAllRequests } from '@/hooks/useAllRequests'
-import { aggregateSessions, inRange, lastNDays, type SessionAggregate } from '@/lib/aggregations'
+import { aggregateSessions, allTimeRange, inRange, lastNDays, type SessionAggregate } from '@/lib/aggregations'
 import { api } from '@/lib/api'
 import { formatNumber, formatRelativeMinutes } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -53,8 +53,17 @@ const FOCUS_FAMILY_EN_DEFAULT = FOCUS_FAMILY_EN_OPTIONS[0].label
 const VIEW_MODE_KEY = 'replay.viewMode'
 type ViewMode = 'standard' | 'openai'
 
+const RANGE_OPTIONS = [
+  { value: '7', label: '最近 7 天' },
+  { value: '14', label: '最近 14 天' },
+  { value: '30', label: '最近 30 天' },
+  { value: '60', label: '最近 60 天' },
+  { value: '90', label: '最近 90 天' },
+  { value: 'all', label: '全部' },
+]
+
 export default function ReplayPage() {
-  const [days, setDays] = useState(30)
+  const [rangeValue, setRangeValue] = useState<RangeSelectValue>(30)
   const [source, setSource] = useState<SourceFilter>('all')
   const [sessionQuery, setSessionQuery] = useState('')
   const [messageQuery, setMessageQuery] = useState('')
@@ -78,7 +87,10 @@ export default function ReplayPage() {
   const selectedId = searchParams.get('sid')
   const { data, loading, error, refresh } = useAllRequests()
 
-  const range = useMemo(() => lastNDays(days), [days])
+  const range = useMemo(
+    () => (rangeValue === 'all' ? allTimeRange(data ?? []) : lastNDays(rangeValue)),
+    [data, rangeValue],
+  )
   const visibleRecords = useMemo(() => {
     if (!data) return []
     const ranged = data.filter((record) => inRange(record, range))
@@ -213,9 +225,7 @@ export default function ReplayPage() {
         </div>
         <div className="flex items-center gap-2">
           <SourceTabs value={source} onChange={setSource} />
-          <RangeSelect value={days} onChange={(value) => {
-            if (typeof value === 'number') setDays(value)
-          }} />
+          <RangeSelect value={rangeValue} onChange={setRangeValue} options={RANGE_OPTIONS} />
         </div>
       </div>
 

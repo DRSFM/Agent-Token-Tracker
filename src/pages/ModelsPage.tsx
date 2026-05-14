@@ -1,17 +1,30 @@
 import { useMemo, useState } from 'react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
-import { RangeSelect } from '@/components/filters/RangeSelect'
+import { RangeSelect, type RangeSelectValue } from '@/components/filters/RangeSelect'
 import { ModelDonut } from '@/components/overview/ModelDonut'
 import { ModelTable } from '@/components/models/ModelTable'
 import { useAllRequests } from '@/hooks/useAllRequests'
-import { aggregateModels, inRange, lastNDays } from '@/lib/aggregations'
+import { aggregateModels, allTimeRange, inRange, lastNDays } from '@/lib/aggregations'
 import { formatNumber, formatPercent } from '@/lib/format'
 import { LoadingState, EmptyState, ErrorState } from '@/components/ui/states'
 
+const RANGE_OPTIONS = [
+  { value: '7', label: '最近 7 天' },
+  { value: '14', label: '最近 14 天' },
+  { value: '30', label: '最近 30 天' },
+  { value: '60', label: '最近 60 天' },
+  { value: '90', label: '最近 90 天' },
+  { value: 'all', label: '全部' },
+]
+
 export default function ModelsPage() {
-  const [days, setDays] = useState(30)
-  const range = useMemo(() => lastNDays(days), [days])
+  const [rangeValue, setRangeValue] = useState<RangeSelectValue>(30)
   const { data, loading, error, refresh } = useAllRequests()
+  const range = useMemo(
+    () => (rangeValue === 'all' ? allTimeRange(data ?? []) : lastNDays(rangeValue)),
+    [data, rangeValue],
+  )
+  const rangeLabel = rangeValue === 'all' ? '全部' : `最近 ${rangeValue} 天`
 
   const filteredRecords = useMemo(
     () => (data ? data.filter((r) => inRange(r, range)) : []),
@@ -21,11 +34,13 @@ export default function ModelsPage() {
 
   const summary = useMemo(() => {
     const totalTokens = shares.reduce((s, x) => s + x.totalTokens, 0)
+    const weightedTokens = shares.reduce((s, x) => s + (x.weightedTotalTokens ?? x.totalTokens), 0)
     const totalRequests = shares.reduce((s, x) => s + x.requestCount, 0)
     const top = shares[0]
     return {
       modelCount: shares.length,
       totalTokens,
+      weightedTokens,
       totalRequests,
       topModel: top?.model ?? '—',
       topShare: top?.share ?? 0,
@@ -41,14 +56,13 @@ export default function ModelsPage() {
             按模型聚合的使用情况、占比与趋势
           </p>
         </div>
-        <RangeSelect value={days} onChange={(value) => {
-          if (typeof value === 'number') setDays(value)
-        }} />
+        <RangeSelect value={rangeValue} onChange={setRangeValue} options={RANGE_OPTIONS} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <SummaryTile label="活跃模型" value={formatNumber(summary.modelCount)} />
-        <SummaryTile label="总 Tokens" value={formatNumber(summary.totalTokens)} />
+        <SummaryTile label="原始 Tokens" value={formatNumber(summary.totalTokens)} />
+        <SummaryTile label="计权 Tokens" value={formatNumber(summary.weightedTokens)} />
         <SummaryTile label="总请求" value={formatNumber(summary.totalRequests)} />
         <SummaryTile
           label="主力模型"
@@ -81,13 +95,13 @@ export default function ModelsPage() {
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <Card>
-            <CardHeader title="占比分布" subtitle="按 Token 总量" />
+            <CardHeader title="占比分布" subtitle="按原始 Token 总量" />
             <CardBody>
               <ModelDonut data={shares} />
             </CardBody>
           </Card>
           <Card className="xl:col-span-2">
-            <CardHeader title="模型明细" subtitle={`最近 ${days} 天 · 含每日趋势`} />
+            <CardHeader title="模型明细" subtitle={`${rangeLabel} · 含每日趋势`} />
             <CardBody className="pt-2">
               <ModelTable shares={shares} records={filteredRecords} range={range} />
             </CardBody>

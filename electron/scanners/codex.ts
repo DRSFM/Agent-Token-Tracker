@@ -82,6 +82,7 @@ export async function scanCodex(
           const cacheTokens = asNumber(usage.cached_input_tokens)
           const totalTokens = asNumber(usage.total_tokens)
           const effectiveTotal = totalTokens || inputTokens + outputTokens
+          const weightedTotalTokens = Math.round(inputTokens + outputTokens - cacheTokens * 0.9)
 
           fileRecords.push({
             id: `codex:${filePath}:${lineNumber}`,
@@ -95,8 +96,8 @@ export async function scanCodex(
             cacheReadTokens: cacheTokens,
             cacheTokens,
             rawTotalTokens: effectiveTotal,
-            weightedTotalTokens: effectiveTotal,
-            totalTokens: effectiveTotal,
+            weightedTotalTokens,
+            totalTokens: weightedTotalTokens,
           })
         })
         parsedFiles += 1

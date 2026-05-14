@@ -281,7 +281,7 @@ function codexRowToReplayEvents(
     const inputTokens = asNumber(usage.input_tokens)
     const outputTokens = asNumber(usage.output_tokens) + asNumber(usage.reasoning_output_tokens)
     const cacheTokens = asNumber(usage.cached_input_tokens)
-    const totalTokens = asNumber(usage.total_tokens) || inputTokens + outputTokens
+    const totalTokens = Math.round(inputTokens + outputTokens - cacheTokens * 0.9)
     events.push(baseEvent({
       source: 'codex',
       sessionId,

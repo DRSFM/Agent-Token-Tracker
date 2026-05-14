@@ -82,7 +82,7 @@ export async function scanClaudeCode(
           const cacheCreationTokens = asNumber(usage.cache_creation_input_tokens)
           const cacheTokens = cacheReadTokens + cacheCreationTokens
           const rawTotalTokens = inputTokens + outputTokens + cacheTokens
-          const totalTokens = Math.round(inputTokens + outputTokens + cacheTokens * 0.1)
+          const weightedTotalTokens = Math.round(inputTokens + outputTokens + cacheTokens * 0.1)
           const sessionId = asString(row.sessionId) ?? fallbackSessionId
           const sessionTitle = sessionTitleFromCwd(row.cwd, shortId(sessionId))
 
@@ -99,8 +99,8 @@ export async function scanClaudeCode(
             cacheCreationTokens,
             cacheTokens,
             rawTotalTokens,
-            weightedTotalTokens: totalTokens,
-            totalTokens,
+            weightedTotalTokens,
+            totalTokens: weightedTotalTokens,
           })
         })
         parsedFiles += 1

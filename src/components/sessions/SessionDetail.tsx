@@ -116,7 +116,8 @@ export function SessionDetail({ session, records }: Props) {
     .slice(0, 8)
 
   const stats = [
-    { icon: Database, label: '总 Tokens', value: formatNumber(session.totalTokens) },
+    { icon: Database, label: '原始 Tokens', value: formatNumber(session.rawTotalTokens) },
+    { icon: Database, label: '计权 Tokens', value: formatNumber(session.weightedTotalTokens) },
     { icon: Database, label: '缓存 Tokens', value: formatNumber(session.cacheTokens) },
     { icon: Hash, label: '请求数', value: formatNumber(session.requestCount) },
     { icon: DollarSign, label: '总计费', value: formatUsd(session.estimatedValueUsd) },
@@ -310,7 +311,7 @@ function BillingBreakdown({ session }: { session: SessionAggregate }) {
     {
       label: '非缓存计费',
       value: session.nonCachedValueUsd,
-      detail: `${formatNumber(session.inputTokens + session.outputTokens)} input/output token`,
+      detail: `${formatNumber(session.nonCachedBillableTokens)} 非缓存 input/output token`,
     },
     {
       label: '总计费',

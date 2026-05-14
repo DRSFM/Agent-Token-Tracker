@@ -6,7 +6,7 @@ import type {
   ModelShare,
   RequestRecord,
 } from '@/types/api'
-import { estimateRequestValue } from '@/lib/pricing'
+import { estimateRequestValue } from './pricing'
 
 export const SOURCE_LABEL: Record<AgentSource, string> = {
   'claude-code': 'Claude Code',
@@ -74,15 +74,31 @@ export const dateKey = (d: Date) =>
 export const sumTokens = (records: RequestRecord[]) =>
   records.reduce((s, r) => s + r.totalTokens, 0)
 
+const rawTokenTotal = (record: RequestRecord) => record.rawTotalTokens ?? record.totalTokens
+export const weightedTokenTotal = (record: RequestRecord) => {
+  const outputTokens = Math.max(record.outputTokens, 0)
+  const cacheTokens = Math.max(record.cacheTokens ?? record.cacheReadTokens ?? 0, 0)
+  if (record.source === 'claude-code') {
+    return Math.round(Math.max(record.inputTokens, 0) + outputTokens + cacheTokens * 0.1)
+  }
+
+  const rawTotal = rawTokenTotal(record)
+  if (cacheTokens > 0) return Math.max(0, Math.round(rawTotal - cacheTokens * 0.9))
+  return record.weightedTotalTokens ?? record.totalTokens
+}
+
 /** 按 sessionId 聚合 — 比 SessionSummary 多带 model 列表 */
 export interface SessionAggregate {
   sessionId: string
   title: string
   source: AgentSource
   totalTokens: number
+  rawTotalTokens: number
+  weightedTotalTokens: number
   inputTokens: number
   outputTokens: number
   cacheTokens: number
+  nonCachedBillableTokens: number
   estimatedValueUsd: number
   cachedValueUsd: number
   nonCachedValueUsd: number
@@ -106,9 +122,12 @@ export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] 
         title: r.sessionTitle ?? r.sessionId,
         source: r.source,
         totalTokens: 0,
+        rawTotalTokens: 0,
+        weightedTotalTokens: 0,
         inputTokens: 0,
         outputTokens: 0,
         cacheTokens: 0,
+        nonCachedBillableTokens: 0,
         estimatedValueUsd: 0,
         cachedValueUsd: 0,
         nonCachedValueUsd: 0,
@@ -124,10 +143,13 @@ export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] 
       map.set(r.sessionId, agg)
     }
     agg.totalTokens += r.totalTokens
+    agg.rawTotalTokens += rawTokenTotal(r)
+    agg.weightedTotalTokens += weightedTokenTotal(r)
     agg.inputTokens += r.inputTokens
     agg.outputTokens += r.outputTokens
     agg.cacheTokens += r.cacheTokens ?? 0
     const estimatedValue = estimateRequestValue(r)
+    agg.nonCachedBillableTokens += estimatedValue.uncachedInputTokens + estimatedValue.outputTokens
     agg.estimatedValueUsd += estimatedValue.totalUsd
     agg.cachedValueUsd += estimatedValue.cachedUsd
     agg.nonCachedValueUsd += estimatedValue.nonCachedUsd
@@ -141,10 +163,10 @@ export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] 
 
     const m = agg.models.find((x) => x.model === r.model)
     if (m) {
-      m.tokens += r.totalTokens
+      m.tokens += rawTokenTotal(r)
       m.count += 1
     } else {
-      agg.models.push({ model: r.model, tokens: r.totalTokens, count: 1 })
+      agg.models.push({ model: r.model, tokens: rawTokenTotal(r), count: 1 })
     }
   }
   for (const a of map.values()) a.models.sort((x, y) => y.tokens - x.tokens)
@@ -153,20 +175,23 @@ export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] 
 
 /** 按 model 聚合 + share */
 export function aggregateModels(records: RequestRecord[]): ModelShare[] {
-  const map = new Map<string, { totalTokens: number; requestCount: number }>()
+  const map = new Map<string, { rawTotalTokens: number; weightedTotalTokens: number; requestCount: number }>()
   for (const r of records) {
-    const cur = map.get(r.model) ?? { totalTokens: 0, requestCount: 0 }
-    cur.totalTokens += r.totalTokens
+    const cur = map.get(r.model) ?? { rawTotalTokens: 0, weightedTotalTokens: 0, requestCount: 0 }
+    cur.rawTotalTokens += rawTokenTotal(r)
+    cur.weightedTotalTokens += weightedTokenTotal(r)
     cur.requestCount += 1
     map.set(r.model, cur)
   }
-  const total = [...map.values()].reduce((s, v) => s + v.totalTokens, 0)
+  const total = [...map.values()].reduce((s, v) => s + v.rawTotalTokens, 0)
   return [...map.entries()]
     .map(([model, v]) => ({
       model,
-      totalTokens: v.totalTokens,
+      rawTotalTokens: v.rawTotalTokens,
+      weightedTotalTokens: v.weightedTotalTokens,
+      totalTokens: v.rawTotalTokens,
       requestCount: v.requestCount,
-      share: total ? v.totalTokens / total : 0,
+      share: total ? v.rawTotalTokens / total : 0,
     }))
     .sort((a, b) => b.totalTokens - a.totalTokens)
 }
@@ -252,7 +277,7 @@ export function modelDailySeries(
   for (const r of records) {
     if (r.model !== model || !inRange(r, range)) continue
     const k = dateKey(new Date(r.timestamp))
-    buckets.set(k, (buckets.get(k) ?? 0) + r.totalTokens)
+    buckets.set(k, (buckets.get(k) ?? 0) + rawTokenTotal(r))
   }
   return [...buckets.values()]
 }

@@ -30,6 +30,21 @@ test('estimateRequestValue discounts cached input tokens at the model cached-inp
   assertApprox(value.totalUsd, 0.00092)
 })
 
+test('estimateRequestValue subtracts Codex cached input from ordinary input even when cacheReadTokens is present', () => {
+  const value = estimateRequestValue({
+    ...baseRecord,
+    cacheReadTokens: 40,
+  })
+
+  assert.equal(value.priced, true)
+  assert.equal(value.cacheReadTokens, 40)
+  assert.equal(value.uncachedInputTokens, 60)
+  assertApprox(value.inputUsd, 0.0003)
+  assertApprox(value.cachedInputUsd, 0.00002)
+  assertApprox(value.outputUsd, 0.0006)
+  assertApprox(value.totalUsd, 0.00092)
+})
+
 test('estimateRecordsValue reports unpriced models separately', () => {
   const summary = estimateRecordsValue([
     baseRecord,
@@ -47,6 +62,7 @@ test('estimateRecordsValue reports unpriced models separately', () => {
 test('estimateRequestValue prices Claude cache reads and cache writes separately', () => {
   const value = estimateRequestValue({
     ...baseRecord,
+    source: 'claude-code',
     model: 'claude-sonnet-4-6-20260201',
     inputTokens: 100,
     outputTokens: 20,

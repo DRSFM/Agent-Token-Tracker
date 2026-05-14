@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
-import { RangeSelect } from '@/components/filters/RangeSelect'
+import { RangeSelect, type RangeSelectValue } from '@/components/filters/RangeSelect'
 import { DailyTrendChart } from '@/components/overview/DailyTrendChart'
 import { Heatmap } from '@/components/overview/Heatmap'
 import { StackedSourceChart } from '@/components/trends/StackedSourceChart'
@@ -10,6 +10,7 @@ import {
   aggregateDaily,
   aggregateDailyBySource,
   aggregateHeatmap,
+  allTimeRange,
   inRange,
   lastNDays,
 } from '@/lib/aggregations'
@@ -20,12 +21,17 @@ const RANGE_OPTIONS = [
   { value: '30', label: '最近 30 天' },
   { value: '60', label: '最近 60 天' },
   { value: '90', label: '最近 90 天' },
+  { value: 'all', label: '全部' },
 ]
 
 export default function TrendsPage() {
-  const [days, setDays] = useState(30)
-  const range = useMemo(() => lastNDays(days), [days])
+  const [rangeValue, setRangeValue] = useState<RangeSelectValue>(30)
   const { data, loading, error, refresh } = useAllRequests()
+  const range = useMemo(
+    () => (rangeValue === 'all' ? allTimeRange(data ?? []) : lastNDays(rangeValue)),
+    [data, rangeValue],
+  )
+  const rangeLabel = rangeValue === 'all' ? '全部' : `最近 ${rangeValue} 天`
 
   const filtered = useMemo(
     () => (data ? data.filter((r) => inRange(r, range)) : []),
@@ -47,10 +53,8 @@ export default function TrendsPage() {
           </p>
         </div>
         <RangeSelect
-          value={days}
-          onChange={(value) => {
-            if (typeof value === 'number') setDays(value)
-          }}
+          value={rangeValue}
+          onChange={setRangeValue}
           options={RANGE_OPTIONS}
         />
       </div>
@@ -78,10 +82,12 @@ export default function TrendsPage() {
         </Card>
       ) : data ? (
         <>
-          <PeriodComparison records={data} range={range} days={days} />
+          {typeof rangeValue === 'number' && (
+            <PeriodComparison records={data} range={range} days={rangeValue} />
+          )}
 
           <Card>
-            <CardHeader title="每日 Token 趋势" subtitle={`最近 ${days} 天`} />
+            <CardHeader title="每日 Token 趋势" subtitle={rangeLabel} />
             <CardBody className="pt-2">
               <DailyTrendChart data={dailyTrend} />
             </CardBody>

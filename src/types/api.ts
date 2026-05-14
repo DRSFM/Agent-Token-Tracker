@@ -72,6 +72,8 @@ export interface DailyTrendPoint {
 /** 模型占比 */
 export interface ModelShare {
   model: string
+  rawTotalTokens?: number
+  weightedTotalTokens?: number
   totalTokens: number
   requestCount: number
   /** 0 ~ 1 */
