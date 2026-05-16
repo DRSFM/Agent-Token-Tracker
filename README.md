@@ -11,6 +11,9 @@
 - **回放**：按会话读取 JSONL 历史，以聊天记录方式展示用户输入与最终助手回复
 - **模型**：各模型用量分布、走势 sparkline
 - **趋势**：按日 token 变化，可按数据来源（Claude Code / Codex）拆分查看
+- **Codex 余量**：查看 Codex 账号的 5 小时与 7 天剩余额度，支持自己的账号 / 其余来源分组、隐藏账号与手动刷新
+- **Codex 账号管理**：支持账号标签与备注、CLI 启动、桌面端切换启动、导出凭证 JSON、删除本地凭证
+- **Codex 账号导入**：支持 OpenAI 官方 OAuth 授权、粘贴 `auth.json` / 账号 JSON / `refresh_token`、导入 API Key、从本机已登录 Codex 或本地 JSON 文件导入
 - **设置**：浅色 / 深色 / 跟随系统主题，自定义背景图与不透明度
 - **自动刷新**：监听日志目录变更，新会话写入后界面会自动更新
 
@@ -49,6 +52,14 @@ agent-token-tracker
 启动后会自动扫描 Claude Code 和 Codex CLI 的本地日志目录，无需配置。如果对应工具尚未在本机产生日志，对应来源会显示为空。
 
 热力图按 `(weekday, hour)` 统计活跃度；最近请求列表实时反映最新写入的会话条目。
+
+### Codex 账号与余量
+
+「余量」页可集中查看本地 Codex 账号的剩余额度，并为凭证添加标签和备注。账号卡片支持直接启动隔离的 Codex CLI，或切换到选中凭证后启动 Codex 桌面端。
+
+「添加账号」支持 OAuth 授权、Token / JSON、API Key、本地已登录账号和本地 JSON 文件导入。订阅账号可查询 ChatGPT 5 小时 / 7 天额度；API Key 账号会作为独立凭证保存，但不参与订阅额度查询。
+
+Team、Business、多账号等凭证会自动使用账号 ID 查询额度；过期的 OAuth token 会在有 `refresh_token` 时自动刷新。
 
 ### 历史回放
 

@@ -29,6 +29,25 @@ const api: TokenAPI = {
   getQuotaVisibilitySettings: () => ipcRenderer.invoke('token:getQuotaVisibilitySettings'),
   setQuotaVisibilitySettings: (settings) => ipcRenderer.invoke('token:setQuotaVisibilitySettings', settings),
   syncQuotaToCpa: () => ipcRenderer.invoke('token:syncQuotaToCpa'),
+  getCodexCredentialMetas: () => ipcRenderer.invoke('token:getCodexCredentialMetas'),
+  setCodexCredentialMeta: (credentialKey, meta) =>
+    ipcRenderer.invoke('token:setCodexCredentialMeta', credentialKey, meta),
+  openCodexCliWithCredential: (credentialKey) =>
+    ipcRenderer.invoke('token:openCodexCliWithCredential', credentialKey),
+  launchCodexWithCredential: (credentialKey) =>
+    ipcRenderer.invoke('token:launchCodexWithCredential', credentialKey),
+  exportCodexCredential: (credentialKey) =>
+    ipcRenderer.invoke('token:exportCodexCredential', credentialKey),
+  deleteCodexCredential: (credentialKey) =>
+    ipcRenderer.invoke('token:deleteCodexCredential', credentialKey),
+  startCodexOAuthLogin: () => ipcRenderer.invoke('token:startCodexOAuthLogin'),
+  submitCodexOAuthCallbackUrl: (loginId, callbackUrl) =>
+    ipcRenderer.invoke('token:submitCodexOAuthCallbackUrl', loginId, callbackUrl),
+  completeCodexOAuthLogin: (loginId) => ipcRenderer.invoke('token:completeCodexOAuthLogin', loginId),
+  importCodexCredentialText: (text) => ipcRenderer.invoke('token:importCodexCredentialText', text),
+  importCodexApiKey: (apiKey, baseUrl) => ipcRenderer.invoke('token:importCodexApiKey', apiKey, baseUrl),
+  importCurrentCodexAuth: () => ipcRenderer.invoke('token:importCurrentCodexAuth'),
+  importCodexCredentialFiles: () => ipcRenderer.invoke('token:importCodexCredentialFiles'),
   getReplaySession: (sessionId, source, options) =>
     ipcRenderer.invoke('token:getReplaySession', sessionId, source, options),
   getUpdateSettings: () => ipcRenderer.invoke('token:getUpdateSettings'),

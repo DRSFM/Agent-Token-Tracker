@@ -385,6 +385,54 @@ export const mockAPI: TokenAPI = {
       syncedAt: new Date().toISOString(),
     }
   },
+  async getCodexCredentialMetas() {
+    return {
+      '自己的账号:codex-primary@example.com.json': {
+        tags: ['主力'],
+        note: '日常使用账号',
+      },
+    }
+  },
+  async setCodexCredentialMeta(_credentialKey, meta) {
+    return meta
+  },
+  async openCodexCliWithCredential() {
+    return { ok: true, message: 'Mock：已启动隔离 Codex CLI。' }
+  },
+  async launchCodexWithCredential() {
+    return { ok: true, message: 'Mock：已切换并启动 Codex。' }
+  },
+  async exportCodexCredential() {
+    return { ok: true, message: 'Mock：已导出凭证 JSON。' }
+  },
+  async deleteCodexCredential() {
+    return { ok: true, message: 'Mock：已删除凭证。' }
+  },
+  async startCodexOAuthLogin() {
+    return {
+      loginId: 'mock-oauth',
+      authUrl: 'https://auth.openai.com/oauth/authorize?mock=1',
+      redirectUri: 'http://127.0.0.1:1455/auth/callback',
+    }
+  },
+  async submitCodexOAuthCallbackUrl() {
+    return { ok: true, message: 'Mock：已读取回调地址。' }
+  },
+  async completeCodexOAuthLogin() {
+    return { ok: true, email: 'oauth@example.com', message: 'Mock：OAuth 账号已导入。' }
+  },
+  async importCodexCredentialText() {
+    return [{ ok: true, email: 'imported@example.com', message: 'Mock：文本账号已导入。' }]
+  },
+  async importCodexApiKey() {
+    return { ok: true, email: 'api-key-demo', message: 'Mock：API Key 已导入。' }
+  },
+  async importCurrentCodexAuth() {
+    return [{ ok: true, email: 'local@example.com', message: 'Mock：本地账号已导入。' }]
+  },
+  async importCodexCredentialFiles() {
+    return [{ ok: true, email: 'file@example.com', message: 'Mock：文件账号已导入。' }]
+  },
   async getReplaySession(sessionId) {
     return [
       {

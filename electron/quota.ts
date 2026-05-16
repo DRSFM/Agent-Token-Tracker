@@ -18,7 +18,10 @@ const DEFAULT_AUTH_DIR = path.join(os.homedir(), '.cli-proxy-api')
 const DEFAULT_CONFIG_DIR = path.join(DEFAULT_AUTH_DIR, 'usage-dashboard')
 const EXTRA_AUTH_DIRS = ['F:\\vscode代码\\cpa凭证学习']
 const QUOTA_URL = 'https://chatgpt.com/backend-api/wham/usage'
+const TOKEN_ENDPOINT = 'https://auth.openai.com/oauth/token'
+const CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const REFRESH_MS = 60_000
+const TOKEN_REFRESH_SKEW_SECONDS = 300
 const PLAN_FOLDERS = ['free', 'plus', 'pro5x', 'pro20x', 'business'] as const
 const PLAN_FOLDER_SET = new Set<string>(PLAN_FOLDERS)
 const PLAN_FOLDER_ALIASES: Record<string, QuotaPlanFolder> = {
@@ -35,8 +38,27 @@ interface AuthRecord {
 }
 
 interface AuthFile {
+  auth_mode?: string
   access_token?: string
+  id_token?: string
+  refresh_token?: string
+  account_id?: string
   email?: string
+  tokens?: unknown
+  OPENAI_API_KEY?: unknown
+}
+
+interface TokenResponse {
+  id_token?: string
+  access_token?: string
+  refresh_token?: string
+}
+
+interface ResolvedAuthTokens {
+  accessToken: string
+  idToken?: string
+  refreshToken?: string
+  accountId?: string
 }
 
 interface UsageWindow {
@@ -60,6 +82,15 @@ interface UsageResponse {
 let cachedStatus: QuotaStatus | null = null
 let cachedAt = 0
 let inFlight: Promise<QuotaStatus> | null = null
+
+class HttpStatusError extends Error {
+  statusCode: number
+
+  constructor(statusCode: number, statusMessage: string | undefined) {
+    super(`HTTP ${statusCode}: ${statusMessage || 'Request failed'}`)
+    this.statusCode = statusCode
+  }
+}
 
 function expandHome(value: string) {
   if (value === '~') return os.homedir()
@@ -159,6 +190,62 @@ function fallbackEmail(filePath: string) {
     .replace(/\.json$/i, '')
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function stringField(record: Record<string, unknown> | null, key: string) {
+  if (!record) return undefined
+  const value = record[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function decodeJwtPayload(token?: string): Record<string, unknown> | null {
+  if (!token) return null
+  const part = token.split('.')[1]
+  if (!part) return null
+  try {
+    return JSON.parse(Buffer.from(part, 'base64url').toString('utf8')) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function jwtAuthValue(token: string | undefined, keys: string[]) {
+  const payload = decodeJwtPayload(token)
+  const auth = asRecord(payload?.['https://api.openai.com/auth'])
+  if (!auth) return undefined
+  for (const key of keys) {
+    const value = stringField(auth, key)
+    if (value) return value
+  }
+  return undefined
+}
+
+function isJwtExpiredSoon(token: string) {
+  const payload = decodeJwtPayload(token)
+  const exp = typeof payload?.exp === 'number' ? payload.exp : 0
+  if (!exp) return true
+  return exp < Math.floor(Date.now() / 1000) + TOKEN_REFRESH_SKEW_SECONDS
+}
+
+function resolveAuthTokens(auth: AuthFile): ResolvedAuthTokens | null {
+  const raw = auth as unknown as Record<string, unknown>
+  const nestedTokens = asRecord(auth.tokens)
+  const accessToken = stringField(raw, 'access_token') || stringField(nestedTokens, 'access_token')
+  if (!accessToken) return null
+
+  const idToken = stringField(raw, 'id_token') || stringField(nestedTokens, 'id_token')
+  const refreshToken = stringField(raw, 'refresh_token') || stringField(nestedTokens, 'refresh_token')
+  const accountId =
+    stringField(raw, 'account_id') ||
+    stringField(nestedTokens, 'account_id') ||
+    jwtAuthValue(accessToken, ['chatgpt_account_id', 'account_id']) ||
+    jwtAuthValue(idToken, ['account_id'])
+
+  return { accessToken, idToken, refreshToken, accountId }
+}
+
 function normalizedPath(value: string) {
   return path.normalize(value).toLowerCase()
 }
@@ -217,13 +304,14 @@ function resetTime(value: unknown) {
   return new Date(n * 1000).toLocaleString('zh-CN', { hour12: false })
 }
 
-function requestOptions(token: string) {
+function requestOptions(token: string, accountId?: string) {
   return {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',
       'User-Agent': 'codex-cli',
+      ...(accountId ? { 'ChatGPT-Account-Id': accountId } : {}),
     },
   }
 }
@@ -236,7 +324,7 @@ function parseJsonResponse(
   reject: (reason?: unknown) => void,
 ) {
   if (statusCode < 200 || statusCode >= 300) {
-    reject(new Error(`HTTP ${statusCode}: ${statusMessage || 'Request failed'}`))
+    reject(new HttpStatusError(statusCode, statusMessage))
     return
   }
   try {
@@ -246,11 +334,11 @@ function parseJsonResponse(
   }
 }
 
-function getJsonDirect(url: string, token: string): Promise<UsageResponse> {
+function getJsonDirect(url: string, token: string, accountId?: string): Promise<UsageResponse> {
   return new Promise((resolve, reject) => {
     const request = https.request(
       url,
-      requestOptions(token),
+      requestOptions(token, accountId),
       (response) => {
         const chunks: Buffer[] = []
         response.on('data', (chunk: Buffer) => chunks.push(chunk))
@@ -267,7 +355,7 @@ function getJsonDirect(url: string, token: string): Promise<UsageResponse> {
   })
 }
 
-function getJsonViaHttpProxy(url: string, token: string, proxyUrl: string): Promise<UsageResponse> {
+function getJsonViaHttpProxy(url: string, token: string, accountId: string | undefined, proxyUrl: string): Promise<UsageResponse> {
   const target = new URL(url)
   const proxy = new URL(proxyUrl)
   const targetPort = Number(target.port || 443)
@@ -308,7 +396,7 @@ function getJsonViaHttpProxy(url: string, token: string, proxyUrl: string): Prom
 
       const request = https.request(
         {
-          ...requestOptions(token),
+          ...requestOptions(token, accountId),
           host: target.hostname,
           path: `${target.pathname}${target.search}`,
           servername: target.hostname,
@@ -331,10 +419,96 @@ function getJsonViaHttpProxy(url: string, token: string, proxyUrl: string): Prom
   })
 }
 
-async function getJson(url: string, token: string): Promise<UsageResponse> {
+async function getJson(url: string, token: string, accountId?: string): Promise<UsageResponse> {
   const { quotaProxyUrl } = await getNetworkSettings()
-  if (quotaProxyUrl) return getJsonViaHttpProxy(url, token, quotaProxyUrl)
-  return getJsonDirect(url, token)
+  if (quotaProxyUrl) return getJsonViaHttpProxy(url, token, accountId, quotaProxyUrl)
+  return getJsonDirect(url, token, accountId)
+}
+
+function refreshTokens(refreshToken: string): Promise<TokenResponse> {
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: CODEX_CLIENT_ID,
+  }).toString()
+
+  return new Promise((resolve, reject) => {
+    const request = https.request(
+      TOKEN_ENDPOINT,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(body),
+          Accept: 'application/json',
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = []
+        response.on('data', (chunk: Buffer) => chunks.push(chunk))
+        response.on('end', () => {
+          const responseBody = Buffer.concat(chunks).toString('utf8')
+          if ((response.statusCode || 0) < 200 || (response.statusCode || 0) >= 300) {
+            reject(new HttpStatusError(response.statusCode || 0, response.statusMessage))
+            return
+          }
+          try {
+            resolve(JSON.parse(responseBody) as TokenResponse)
+          } catch {
+            reject(new Error('Token 刷新失败：响应不是有效 JSON'))
+          }
+        })
+      },
+    )
+    request.setTimeout(20_000, () => request.destroy(new Error('Token 刷新超时')))
+    request.on('error', reject)
+    request.end(body)
+  })
+}
+
+async function writeRefreshedTokens(filePath: string, auth: AuthFile, refreshed: TokenResponse) {
+  if (!refreshed.access_token) throw new Error('Token 刷新响应缺少 access_token')
+
+  auth.access_token = refreshed.access_token
+  if (refreshed.id_token) auth.id_token = refreshed.id_token
+  if (refreshed.refresh_token) auth.refresh_token = refreshed.refresh_token
+
+  const nestedTokens = asRecord(auth.tokens)
+  if (nestedTokens) {
+    nestedTokens.access_token = refreshed.access_token
+    if (refreshed.id_token) nestedTokens.id_token = refreshed.id_token
+    if (refreshed.refresh_token) nestedTokens.refresh_token = refreshed.refresh_token
+    auth.tokens = nestedTokens
+  }
+
+  await fs.writeFile(filePath, `${JSON.stringify(auth, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
+}
+
+function shouldRetryWithRefresh(error: unknown) {
+  return error instanceof HttpStatusError && (error.statusCode === 401 || error.statusCode === 403)
+}
+
+async function getQuotaWithTokenRefresh(record: AuthRecord, auth: AuthFile) {
+  let tokens = resolveAuthTokens(auth)
+  if (!tokens) throw new Error('missing access_token')
+
+  if (tokens.refreshToken && isJwtExpiredSoon(tokens.accessToken)) {
+    const refreshed = await refreshTokens(tokens.refreshToken)
+    await writeRefreshedTokens(record.filePath, auth, refreshed)
+    tokens = resolveAuthTokens(auth)
+    if (!tokens) throw new Error('missing access_token')
+  }
+
+  try {
+    return await getJson(QUOTA_URL, tokens.accessToken, tokens.accountId)
+  } catch (error) {
+    if (!tokens.refreshToken || !shouldRetryWithRefresh(error)) throw error
+    const refreshed = await refreshTokens(tokens.refreshToken)
+    await writeRefreshedTokens(record.filePath, auth, refreshed)
+    const refreshedTokens = resolveAuthTokens(auth)
+    if (!refreshedTokens) throw new Error('missing access_token')
+    return getJson(QUOTA_URL, refreshedTokens.accessToken, refreshedTokens.accountId)
+  }
 }
 
 function errorRow(record: AuthRecord, email: string, error: unknown, timestamp: string): QuotaAccountStatus {
@@ -400,10 +574,27 @@ async function refreshRecord(
     const auth = JSON.parse(await fs.readFile(record.filePath, 'utf8')) as AuthFile
     email = auth.email || email
 
-    const token = auth.access_token
-    if (!token) throw new Error('missing access_token')
+    if (auth.auth_mode?.toLowerCase() === 'apikey' || typeof auth.OPENAI_API_KEY === 'string') {
+      return {
+        timestamp,
+        visibilityKey,
+        email,
+        plan: 'API_KEY',
+        allowed: true,
+        limitReached: false,
+        primaryUsedPercent: null,
+        primaryRemainingPercent: null,
+        primaryResetAt: '',
+        secondaryUsedPercent: null,
+        secondaryRemainingPercent: null,
+        secondaryResetAt: '',
+        creditsBalance: '',
+        accountGroup: record.accountGroup,
+        error: '',
+      }
+    }
 
-    const data = await getJson(QUOTA_URL, token)
+    const data = await getQuotaWithTokenRefresh(record, auth)
     const rateLimit = data.rate_limit || {}
     const primary = rateLimit.primary_window || {}
     const secondary = rateLimit.secondary_window || {}

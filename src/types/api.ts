@@ -219,6 +219,26 @@ export interface QuotaStatus {
   nextRefreshAt?: string
 }
 
+export interface CodexCredentialMeta {
+  tags: string[]
+  note: string
+}
+
+export type CodexCredentialMetaMap = Record<string, CodexCredentialMeta>
+
+export interface CodexCredentialActionResult {
+  ok: boolean
+  message: string
+  path?: string
+  email?: string
+}
+
+export interface CodexOAuthLoginStartResponse {
+  loginId: string
+  authUrl: string
+  redirectUri: string
+}
+
 export interface SyncQuotaToCpaResult {
   ok: boolean
   updated: number
@@ -361,6 +381,45 @@ export interface TokenAPI {
 
   /** 触发后端同步余量到 CPA 路由。只返回数量汇总，不返回敏感原文。 */
   syncQuotaToCpa(): Promise<SyncQuotaToCpaResult>
+
+  /** 获取 Codex 凭证标签与备注。 */
+  getCodexCredentialMetas(): Promise<CodexCredentialMetaMap>
+
+  /** 保存 Codex 凭证标签与备注。 */
+  setCodexCredentialMeta(credentialKey: string, meta: CodexCredentialMeta): Promise<CodexCredentialMeta>
+
+  /** 使用选中凭证启动隔离 CODEX_HOME 的 Codex CLI。 */
+  openCodexCliWithCredential(credentialKey: string): Promise<CodexCredentialActionResult>
+
+  /** 将选中凭证写入当前 CODEX_HOME 并启动 Codex。 */
+  launchCodexWithCredential(credentialKey: string): Promise<CodexCredentialActionResult>
+
+  /** 导出选中凭证 JSON 到用户指定目录。 */
+  exportCodexCredential(credentialKey: string): Promise<CodexCredentialActionResult>
+
+  /** 删除选中凭证 JSON。 */
+  deleteCodexCredential(credentialKey: string): Promise<CodexCredentialActionResult>
+
+  /** 开始 Codex 官方 OAuth 授权，并打开浏览器。 */
+  startCodexOAuthLogin(): Promise<CodexOAuthLoginStartResponse>
+
+  /** 手动提交 Codex OAuth 回调地址。 */
+  submitCodexOAuthCallbackUrl(loginId: string, callbackUrl: string): Promise<CodexCredentialActionResult>
+
+  /** 完成 Codex OAuth 授权导入。 */
+  completeCodexOAuthLogin(loginId: string): Promise<CodexCredentialActionResult>
+
+  /** 从粘贴的 auth.json / 账号 JSON / refresh_token 导入。 */
+  importCodexCredentialText(text: string): Promise<CodexCredentialActionResult[]>
+
+  /** 导入 API Key 账号。 */
+  importCodexApiKey(apiKey: string, baseUrl?: string): Promise<CodexCredentialActionResult>
+
+  /** 从当前 CODEX_HOME/auth.json 导入已登录账号。 */
+  importCurrentCodexAuth(): Promise<CodexCredentialActionResult[]>
+
+  /** 从本地 JSON 文件选择导入。 */
+  importCodexCredentialFiles(): Promise<CodexCredentialActionResult[]>
 
   /** 按需加载某个会话的历史回放事件 */
   getReplaySession(

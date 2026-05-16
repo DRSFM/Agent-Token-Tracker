@@ -30,6 +30,21 @@ import { getQuotaStatus } from './quota'
 import { getQuotaVisibilitySettings, setQuotaVisibilitySettings } from './quota-visibility'
 import { syncQuotaToCpa } from './cpa-sync'
 import { getNetworkSettings, setNetworkSettings } from './network-settings'
+import {
+  completeCodexOAuthLogin,
+  deleteCodexCredential,
+  exportCodexCredential,
+  getCodexCredentialMetas,
+  importCodexApiKey,
+  importCodexCredentialFiles,
+  importCodexCredentialText,
+  importCurrentCodexAuth,
+  launchCodexWithCredential,
+  openCodexCliWithCredential,
+  setCodexCredentialMeta,
+  startCodexOAuthLogin,
+  submitCodexOAuthCallbackUrl,
+} from './codex-accounts'
 
 function broadcastDataChanged() {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -118,6 +133,37 @@ export function registerIpcHandlers() {
     setQuotaVisibilitySettings(settings),
   )
   ipcMain.handle('token:syncQuotaToCpa', async () => syncQuotaToCpa())
+  ipcMain.handle('token:getCodexCredentialMetas', async () => getCodexCredentialMetas())
+  ipcMain.handle('token:setCodexCredentialMeta', async (_e, credentialKey, meta) =>
+    setCodexCredentialMeta(credentialKey, meta),
+  )
+  ipcMain.handle('token:openCodexCliWithCredential', async (_e, credentialKey: string) =>
+    openCodexCliWithCredential(credentialKey),
+  )
+  ipcMain.handle('token:launchCodexWithCredential', async (_e, credentialKey: string) =>
+    launchCodexWithCredential(credentialKey),
+  )
+  ipcMain.handle('token:exportCodexCredential', async (_e, credentialKey: string) =>
+    exportCodexCredential(credentialKey),
+  )
+  ipcMain.handle('token:deleteCodexCredential', async (_e, credentialKey: string) =>
+    deleteCodexCredential(credentialKey),
+  )
+  ipcMain.handle('token:startCodexOAuthLogin', async () => startCodexOAuthLogin())
+  ipcMain.handle('token:submitCodexOAuthCallbackUrl', async (_e, loginId: string, callbackUrl: string) =>
+    submitCodexOAuthCallbackUrl(loginId, callbackUrl),
+  )
+  ipcMain.handle('token:completeCodexOAuthLogin', async (_e, loginId: string) =>
+    completeCodexOAuthLogin(loginId),
+  )
+  ipcMain.handle('token:importCodexCredentialText', async (_e, text: string) =>
+    importCodexCredentialText(text),
+  )
+  ipcMain.handle('token:importCodexApiKey', async (_e, apiKey: string, baseUrl?: string) =>
+    importCodexApiKey(apiKey, baseUrl),
+  )
+  ipcMain.handle('token:importCurrentCodexAuth', async () => importCurrentCodexAuth())
+  ipcMain.handle('token:importCodexCredentialFiles', async () => importCodexCredentialFiles())
 
   ipcMain.handle('token:getReplaySession', async (
     _e,
