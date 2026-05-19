@@ -9,6 +9,7 @@ import type {
 import { tokenDataStore } from './aggregator'
 import { claudeCodeRoot } from './scanners/claude'
 import { codexSessionsRoot } from './scanners/codex'
+import { openCodeDataRoot } from './scanners/opencode'
 import {
   getRemoteSourceSettings,
   getRemoteSyncStatus,
@@ -38,6 +39,7 @@ import {
   importCodexApiKey,
   importCodexCredentialFiles,
   importCodexCredentialText,
+  importCodexSubscriptionFromCockpit,
   importCurrentCodexAuth,
   launchCodexWithCredential,
   openCodexCliWithCredential,
@@ -100,13 +102,15 @@ export function registerIpcHandlers() {
         ? claudeCodeRoot()
         : kind === 'codex'
           ? codexSessionsRoot()
-          : kind === 'ssh-readme'
-            ? app.isPackaged
-              ? path.join(process.resourcesPath, 'ssh.readme')
-              : path.join(app.getAppPath(), 'assets', 'ssh.readme')
-            : kind === 'remote-cache'
-              ? remoteCacheRoot()
-              : app.getPath('userData')
+          : kind === 'opencode'
+            ? openCodeDataRoot()
+            : kind === 'ssh-readme'
+              ? app.isPackaged
+                ? path.join(process.resourcesPath, 'ssh.readme')
+                : path.join(app.getAppPath(), 'assets', 'ssh.readme')
+              : kind === 'remote-cache'
+                ? remoteCacheRoot()
+                : app.getPath('userData')
     const error = await shell.openPath(targetPath)
     return { ok: !error, path: targetPath, error: error || undefined }
   })
@@ -134,6 +138,7 @@ export function registerIpcHandlers() {
   )
   ipcMain.handle('token:syncQuotaToCpa', async () => syncQuotaToCpa())
   ipcMain.handle('token:getCodexCredentialMetas', async () => getCodexCredentialMetas())
+  ipcMain.handle('token:importCodexSubscriptionFromCockpit', async () => importCodexSubscriptionFromCockpit())
   ipcMain.handle('token:setCodexCredentialMeta', async (_e, credentialKey, meta) =>
     setCodexCredentialMeta(credentialKey, meta),
   )

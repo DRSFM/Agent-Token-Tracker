@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  CalendarDays,
   Check,
   Clock3,
   Copy,
@@ -70,6 +71,27 @@ function percentTone(value: number | null) {
 
 function quotaLabel(value: number | null) {
   return value === null ? '不可用' : `${value}%`
+}
+
+function formatSubscriptionTime(value?: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).replace(/\//g, '-')
+}
+
+function subscriptionDaysLeft(value?: string) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return Math.ceil((date.getTime() - Date.now()) / 86_400_000)
 }
 
 function formatQuotaError(error: string) {
@@ -204,7 +226,7 @@ function CredentialActions({
 }
 
 function MetaBadges({ meta }: { meta: CodexCredentialMeta }) {
-  if (meta.tags.length === 0 && !meta.note) return null
+  if (meta.tags.length === 0 && !meta.note && !meta.subscriptionActiveUntil) return null
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -223,6 +245,37 @@ function MetaBadges({ meta }: { meta: CodexCredentialMeta }) {
           <span className="truncate">{meta.note}</span>
         </span>
       )}
+      {meta.subscriptionActiveUntil && (
+        <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 px-1.5 py-0.5 text-xs font-medium text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">
+          <CalendarDays className="h-3 w-3" />
+          {formatSubscriptionTime(meta.subscriptionActiveUntil)}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function SubscriptionValidity({ meta }: { meta: CodexCredentialMeta }) {
+  const formatted = formatSubscriptionTime(meta.subscriptionActiveUntil)
+  if (!formatted) return null
+
+  const days = subscriptionDaysLeft(meta.subscriptionActiveUntil)
+  const expired = days !== null && days < 0
+
+  return (
+    <div
+      className={cn(
+        'mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm',
+        expired
+          ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300'
+          : 'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300',
+      )}
+    >
+      <span className="inline-flex items-center gap-2 font-semibold">
+        <CalendarDays className="h-4 w-4" />
+        {expired ? '已过期' : `有效期 ${days ?? '-'}天`}
+      </span>
+      <span className="font-mono text-xs text-slate-600 dark:text-slate-300">{formatted}</span>
     </div>
   )
 }
@@ -299,6 +352,9 @@ function CredentialMetaModal({
               onSave({
                 tags: tagsText.split(/[,，\s]+/).map((tag) => tag.trim()).filter(Boolean),
                 note,
+                subscriptionActiveUntil: meta.subscriptionActiveUntil,
+                subscriptionPlan: meta.subscriptionPlan,
+                subscriptionSource: meta.subscriptionSource,
               })
             }
             disabled={saving}
@@ -860,6 +916,7 @@ function AccountCard({
           <QuotaLimitRow label="7 天限额" value={quota.secondaryRemainingPercent} resetAt={quota.secondaryResetAt} />
         </div>
       )}
+      <SubscriptionValidity meta={meta} />
 
       <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
         <CredentialActions
@@ -1023,6 +1080,7 @@ export default function QuotaPage() {
   const [actionResult, setActionResult] = useState<CodexCredentialActionResult | null>(null)
   const [actionError, setActionError] = useState('')
   const [showAddAccountModal, setShowAddAccountModal] = useState(false)
+  const [syncingCockpitSubscription, setSyncingCockpitSubscription] = useState(false)
 
   const load = useCallback(async (force = false) => {
     if (force) setRefreshing(true)
@@ -1102,6 +1160,28 @@ export default function QuotaPage() {
       setSyncing(false)
     }
   }, [load])
+
+  const syncCockpitSubscription = useCallback(async () => {
+    setSyncingCockpitSubscription(true)
+    setActionResult(null)
+    setActionError('')
+    try {
+      const results = await api.importCodexSubscriptionFromCockpit()
+      const imported = results.filter((item) => item.ok !== false)
+      setActionResult({
+        ok: imported.length > 0,
+        message: imported.length ? `已同步 ${imported.length} 个账号有效期` : results[0]?.message || '没有同步到有效期',
+        email: imported[0]?.email,
+        path: imported[0]?.path,
+      })
+      const metas = await api.getCodexCredentialMetas()
+      setCredentialMetas(metas)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSyncingCockpitSubscription(false)
+    }
+  }, [])
 
   const updateHiddenQuotaKeys = useCallback(
     async (updater: (current: string[]) => string[]) => {
@@ -1349,6 +1429,15 @@ export default function QuotaPage() {
           >
             <Plus className="h-3.5 w-3.5" />
             添加账号
+          </button>
+          <button
+            type="button"
+            onClick={syncCockpitSubscription}
+            disabled={syncingCockpitSubscription}
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 text-sm font-medium text-teal-700 transition hover:bg-teal-100 disabled:opacity-60 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300 dark:hover:bg-teal-500/20"
+          >
+            <CalendarDays className={cn('h-3.5 w-3.5', syncingCockpitSubscription && 'animate-pulse')} />
+            同步有效期
           </button>
           <button
             type="button"

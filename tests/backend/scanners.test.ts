@@ -5,6 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { scanClaudeCode } from '../../electron/scanners/claude'
 import { scanCodex } from '../../electron/scanners/codex'
+import { openCodeRowsToRecords } from '../../electron/scanners/opencode'
 import { cacheKey } from '../../electron/scanners/shared'
 import { readClaudeReplay, readCodexReplay } from '../../electron/replay'
 
@@ -136,6 +137,49 @@ test('scanCodex uses last_token_usage total tokens and ignores cumulative totals
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
+})
+
+test('openCodeRowsToRecords reads model and cache counters from assistant message data', () => {
+  const records = openCodeRowsToRecords(
+    [
+      {
+        messageId: 'msg-1',
+        sessionId: 'ses-1',
+        timeCreated: Date.UTC(2026, 4, 10, 10, 0, 0),
+        sessionTitle: 'Mimo session',
+        sessionDirectory: 'F:\\project',
+        data: JSON.stringify({
+          role: 'assistant',
+          providerID: 'mimo',
+          modelID: 'mimo-v2.5-pro',
+          tokens: {
+            total: 15_997,
+            input: 14_603,
+            output: 154,
+            reasoning: 216,
+            cache: { write: 0, read: 1_024 },
+          },
+          time: {
+            created: Date.UTC(2026, 4, 10, 10, 0, 0),
+            completed: Date.UTC(2026, 4, 10, 10, 0, 7),
+          },
+        }),
+      },
+    ],
+    'C:\\Users\\demo\\.local\\share\\opencode\\opencode.db',
+  )
+
+  assert.equal(records.length, 1)
+  assert.equal(records[0].source, 'opencode')
+  assert.equal(records[0].sessionId, 'ses-1')
+  assert.equal(records[0].sessionTitle, 'Mimo session')
+  assert.equal(records[0].model, 'mimo-v2.5-pro')
+  assert.equal(records[0].inputTokens, 14_603)
+  assert.equal(records[0].outputTokens, 370)
+  assert.equal(records[0].cacheReadTokens, 1_024)
+  assert.equal(records[0].cacheTokens, 1_024)
+  assert.equal(records[0].rawTotalTokens, 15_997)
+  assert.equal(records[0].weightedTotalTokens, 15_075)
 })
 
 test('scanners reuse unchanged file cache entries', async () => {

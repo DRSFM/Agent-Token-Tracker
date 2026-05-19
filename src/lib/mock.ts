@@ -135,10 +135,10 @@ const recentRequests: RequestRecord[] = [
   {
     id: 'r3',
     timestamp: new Date(today.setHours(14, 5, 44)).toISOString(),
-    source: 'codex',
+    source: 'opencode',
     sessionId: 's3',
     sessionTitle: '代码重构计划',
-    model: 'gpt-4.1-mini',
+    model: 'mimo-v2.5-pro',
     inputTokens: 3_201,
     outputTokens: 2_104,
     cacheTokens: 2_990,
@@ -207,6 +207,17 @@ const dataSourceStatus: DataSourceStatus = {
       parsedFiles: 1,
       reusedFiles: 3,
       requestCount: 3,
+    },
+    {
+      source: 'opencode',
+      label: 'opencode',
+      rootPath: '~/.local/share/opencode',
+      rootExists: true,
+      healthy: true,
+      scannedFiles: 1,
+      parsedFiles: 1,
+      reusedFiles: 0,
+      requestCount: 1,
     },
   ],
 }
@@ -390,8 +401,14 @@ export const mockAPI: TokenAPI = {
       '自己的账号:codex-primary@example.com.json': {
         tags: ['主力'],
         note: '日常使用账号',
+        subscriptionActiveUntil: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(),
+        subscriptionPlan: 'plus',
+        subscriptionSource: 'cockpit-tools',
       },
     }
+  },
+  async importCodexSubscriptionFromCockpit() {
+    return [{ ok: true, email: 'codex-primary@example.com', message: 'Mock：已同步 Cockpit Tools 有效期。' }]
   },
   async setCodexCredentialMeta(_credentialKey, meta) {
     return meta

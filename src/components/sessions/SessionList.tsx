@@ -15,8 +15,9 @@ interface Props {
   onSelect: (id: string) => void
 }
 
-const HEADERS: { key: SessionSortKey | 'title' | 'source'; label: string; align?: 'right'; width?: string }[] = [
+const HEADERS: { key: SessionSortKey | 'title' | 'source' | 'model'; label: string; align?: 'right'; width?: string }[] = [
   { key: 'title', label: '会话', width: 'flex-1 min-w-0' },
+  { key: 'model', label: '模型', width: 'w-40 shrink-0' },
   { key: 'source', label: '来源', width: 'w-28 shrink-0' },
   { key: 'requests', label: '请求', align: 'right', width: 'w-20 shrink-0' },
   { key: 'tokens', label: '原始', align: 'right', width: 'w-28 shrink-0' },
@@ -30,73 +31,89 @@ export function SessionList({ rows, sortKey, sortDesc, onSort, selectedId, onSel
   const max = Math.max(...rows.map((r) => r.rawTotalTokens), 1)
 
   return (
-    <div className="text-sm">
-      <div className="flex items-center gap-3 px-3 py-2 text-xs text-slate-400 border-b border-slate-100 dark:border-slate-800">
-        {HEADERS.map((h) => {
-          const sortable = h.key === 'tokens' || h.key === 'weighted' || h.key === 'cache' || h.key === 'requests' || h.key === 'cost' || h.key === 'lastActive'
-          const active = sortKey === h.key
-          return (
-            <div
-              key={h.key}
-              className={cn(h.width, h.align === 'right' && 'text-right', sortable && 'cursor-pointer select-none')}
-              onClick={() => sortable && onSort(h.key as SessionSortKey)}
-            >
-              <span className={cn('inline-flex items-center gap-1', active && 'text-brand-600 dark:text-brand-400')}>
-                {h.label}
-                {active && (sortDesc ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />)}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-      <ul className="space-y-0.5 mt-1 max-h-[560px] overflow-y-auto pr-1">
-        {rows.map((s) => {
-          const isActive = selectedId === s.sessionId
-          return (
-            <li
-              key={s.sessionId}
-              onClick={() => onSelect(s.sessionId)}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition relative',
-                isActive
-                  ? 'bg-brand-500/10 dark:bg-brand-500/15'
-                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
-              )}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="truncate text-slate-800 dark:text-slate-100 font-medium">{s.title}</div>
-                <div className="mt-1 h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full"
-                    style={{ width: `${(s.rawTotalTokens / max) * 100}%` }}
-                  />
+    <div className="text-sm overflow-x-auto">
+      <div className="min-w-[1080px]">
+        <div className="flex items-center gap-3 px-3 py-2 text-xs text-slate-400 border-b border-slate-100 dark:border-slate-800">
+          {HEADERS.map((h) => {
+            const sortable = h.key === 'tokens' || h.key === 'weighted' || h.key === 'cache' || h.key === 'requests' || h.key === 'cost' || h.key === 'lastActive'
+            const active = sortKey === h.key
+            return (
+              <div
+                key={h.key}
+                className={cn(h.width, h.align === 'right' && 'text-right', sortable && 'cursor-pointer select-none')}
+                onClick={() => sortable && onSort(h.key as SessionSortKey)}
+              >
+                <span className={cn('inline-flex items-center gap-1', active && 'text-brand-600 dark:text-brand-400')}>
+                  {h.label}
+                  {active && (sortDesc ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />)}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        <ul className="space-y-0.5 mt-1 max-h-[560px] overflow-y-auto pr-1">
+          {rows.map((s) => {
+            const isActive = selectedId === s.sessionId
+            const modelLabel = primaryModelLabel(s.models)
+            return (
+              <li
+                key={s.sessionId}
+                onClick={() => onSelect(s.sessionId)}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition relative',
+                  isActive
+                    ? 'bg-brand-500/10 dark:bg-brand-500/15'
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="truncate text-slate-800 dark:text-slate-100 font-medium">{s.title}</div>
+                  <div className="mt-1 h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full"
+                      style={{ width: `${(s.rawTotalTokens / max) * 100}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="w-28 shrink-0">
-                <SourceBadge source={s.source} />
-              </div>
-              <div className="w-20 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
-                {formatNumber(s.requestCount)}
-              </div>
-              <div className="w-28 shrink-0 text-right tabular-nums text-slate-800 dark:text-slate-100 font-medium">
-                {formatNumber(s.rawTotalTokens)}
-              </div>
-              <div className="w-24 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
-                {formatNumber(s.weightedTotalTokens)}
-              </div>
-              <div className="w-24 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
-                {formatNumber(s.cacheTokens)}
-              </div>
-              <div className="w-24 shrink-0 text-right tabular-nums text-slate-700 dark:text-slate-200 text-xs font-medium">
-                {formatUsd(s.estimatedValueUsd)}
-              </div>
-              <div className="w-24 shrink-0 text-right text-xs text-slate-500 dark:text-slate-400">
-                {formatRelativeMinutes(s.lastActiveAt)}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+                <div className="w-40 shrink-0">
+                  <span
+                    title={s.models.map((model) => `${model.model} (${model.count})`).join(', ')}
+                    className="inline-flex max-w-full items-center rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  >
+                    <span className="truncate">{modelLabel}</span>
+                  </span>
+                </div>
+                <div className="w-28 shrink-0">
+                  <SourceBadge source={s.source} />
+                </div>
+                <div className="w-20 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
+                  {formatNumber(s.requestCount)}
+                </div>
+                <div className="w-28 shrink-0 text-right tabular-nums text-slate-800 dark:text-slate-100 font-medium">
+                  {formatNumber(s.rawTotalTokens)}
+                </div>
+                <div className="w-24 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
+                  {formatNumber(s.weightedTotalTokens)}
+                </div>
+                <div className="w-24 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
+                  {formatNumber(s.cacheTokens)}
+                </div>
+                <div className="w-24 shrink-0 text-right tabular-nums text-slate-700 dark:text-slate-200 text-xs font-medium">
+                  {formatUsd(s.estimatedValueUsd)}
+                </div>
+                <div className="w-24 shrink-0 text-right text-xs text-slate-500 dark:text-slate-400">
+                  {formatRelativeMinutes(s.lastActiveAt)}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
     </div>
   )
+}
+
+function primaryModelLabel(models: SessionAggregate['models']) {
+  const primary = models[0]?.model ?? 'unknown'
+  return models.length > 1 ? `${primary} +${models.length - 1}` : primary
 }

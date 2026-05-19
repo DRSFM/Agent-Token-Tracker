@@ -15,7 +15,7 @@
 // ============================================================
 
 /** 已知的 agent 工具来源 */
-export type AgentSource = 'claude-code' | 'codex' | 'unknown'
+export type AgentSource = 'claude-code' | 'codex' | 'opencode' | 'unknown'
 
 /** 单条请求记录 (一次模型调用) */
 export interface RequestRecord {
@@ -222,6 +222,9 @@ export interface QuotaStatus {
 export interface CodexCredentialMeta {
   tags: string[]
   note: string
+  subscriptionActiveUntil?: string
+  subscriptionPlan?: string
+  subscriptionSource?: string
 }
 
 export type CodexCredentialMetaMap = Record<string, CodexCredentialMeta>
@@ -384,6 +387,9 @@ export interface TokenAPI {
 
   /** 获取 Codex 凭证标签与备注。 */
   getCodexCredentialMetas(): Promise<CodexCredentialMetaMap>
+
+  /** 从 Cockpit Tools 本地缓存同步 Codex 账号订阅有效期。 */
+  importCodexSubscriptionFromCockpit(): Promise<CodexCredentialActionResult[]>
 
   /** 保存 Codex 凭证标签与备注。 */
   setCodexCredentialMeta(credentialKey: string, meta: CodexCredentialMeta): Promise<CodexCredentialMeta>

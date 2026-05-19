@@ -7,6 +7,11 @@ interface ApiTokenRate {
   outputUsdPerMillion: number
 }
 
+interface DynamicApiTokenRate extends ApiTokenRate {
+  thresholdTokens?: number
+  highContextRate?: ApiTokenRate
+}
+
 interface EstimatedRequestValue {
   totalUsd: number
   inputUsd: number
@@ -40,7 +45,7 @@ export interface EstimatedValueSummary {
   unpricedRequests: number
 }
 
-const OPENAI_API_RATES: { test: RegExp; rate: ApiTokenRate }[] = [
+const OPENAI_API_RATES: { test: RegExp; rate: DynamicApiTokenRate }[] = [
   {
     test: /^gpt-5\.5\b/i,
     rate: { inputUsdPerMillion: 5, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 30 },
@@ -85,14 +90,47 @@ const OPENAI_API_RATES: { test: RegExp; rate: ApiTokenRate }[] = [
     test: /^claude-(?:.+-)?haiku-3-5\b/i,
     rate: { inputUsdPerMillion: 0.8, cachedInputUsdPerMillion: 0.08, cacheWriteUsdPerMillion: 1, outputUsdPerMillion: 4 },
   },
+  {
+    test: /^mimo[-_]?v?2\.?5[-_]?pro\b|^mimo2\.?5pro\b/i,
+    // Official MiMo docs publish CNY rates; keep this table in USD by
+    // converting at 7 CNY/USD to match the app's existing value display.
+    rate: {
+      inputUsdPerMillion: 1.05,
+      cachedInputUsdPerMillion: 0.21,
+      cacheWriteUsdPerMillion: 0,
+      outputUsdPerMillion: 3.15,
+      thresholdTokens: 256_000,
+      highContextRate: {
+        inputUsdPerMillion: 2.1,
+        cachedInputUsdPerMillion: 0.42,
+        cacheWriteUsdPerMillion: 0,
+        outputUsdPerMillion: 6.3,
+      },
+    },
+  },
 ]
 
 export function apiRateForModel(model: string): ApiTokenRate | null {
   return OPENAI_API_RATES.find((entry) => entry.test.test(model))?.rate ?? null
 }
 
-export function estimateRequestValue(record: RequestRecord): EstimatedRequestValue {
+function apiRateForRecord(record: RequestRecord): ApiTokenRate | null {
   const rate = apiRateForModel(record.model)
+  if (!rate) return null
+  const dynamicRate = rate as DynamicApiTokenRate
+  const totalTokens = Math.max(record.rawTotalTokens ?? record.totalTokens, 0)
+  if (
+    dynamicRate.thresholdTokens !== undefined &&
+    dynamicRate.highContextRate &&
+    totalTokens > dynamicRate.thresholdTokens
+  ) {
+    return dynamicRate.highContextRate
+  }
+  return rate
+}
+
+export function estimateRequestValue(record: RequestRecord): EstimatedRequestValue {
+  const rate = apiRateForRecord(record)
   if (!rate) {
     return {
       totalUsd: 0,
@@ -112,7 +150,7 @@ export function estimateRequestValue(record: RequestRecord): EstimatedRequestVal
   }
 
   const hasSeparateCacheCounters =
-    record.source === 'claude-code' &&
+    (record.source === 'claude-code' || record.source === 'opencode') &&
     (record.cacheReadTokens !== undefined || record.cacheCreationTokens !== undefined)
   const cacheReadTokens = hasSeparateCacheCounters
     ? Math.max(record.cacheReadTokens ?? 0, 0)

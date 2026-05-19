@@ -1,4 +1,4 @@
-import { Sparkles, Code2, Bot, type LucideIcon } from 'lucide-react'
+import { Sparkles, Code2, Bot, TerminalSquare, type LucideIcon } from 'lucide-react'
 import type { AgentSource } from '@/types/api'
 import { SOURCE_LABEL } from '@/lib/aggregations'
 import { cn } from '@/lib/utils'
@@ -6,12 +6,14 @@ import { cn } from '@/lib/utils'
 const ICON: Record<AgentSource, LucideIcon> = {
   'claude-code': Sparkles,
   codex: Code2,
+  opencode: TerminalSquare,
   unknown: Bot,
 }
 
 const COLOR: Record<AgentSource, string> = {
   'claude-code': 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300',
   codex: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+  opencode: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300',
   unknown: 'bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300',
 }
 

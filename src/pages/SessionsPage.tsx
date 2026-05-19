@@ -6,6 +6,7 @@ import { RangeSelect, type RangeSelectValue } from '@/components/filters/RangeSe
 import { SourceTabs, type SourceFilter } from '@/components/filters/SourceTabs'
 import { SessionList, type SessionSortKey } from '@/components/sessions/SessionList'
 import { SessionDetail } from '@/components/sessions/SessionDetail'
+import { Select } from '@/components/ui/select'
 import { useAllRequests } from '@/hooks/useAllRequests'
 import {
   aggregateSessions,
@@ -41,6 +42,7 @@ const RANGE_OPTIONS = [
 export default function SessionsPage() {
   const [rangeValue, setRangeValue] = useState<RangeSelectValue>(30)
   const [source, setSource] = useState<SourceFilter>('all')
+  const [model, setModel] = useState('all')
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '')
   const [sortKey, setSortKey] = useState<SessionSortKey>('tokens')
@@ -71,11 +73,36 @@ export default function SessionsPage() {
     () => (rangeValue === 'all' ? allTimeRange(data ?? []) : lastNDays(rangeValue)),
     [data, rangeValue],
   )
-  const visibleRecords = useMemo(() => {
+  const sourceScopedRecords = useMemo(() => {
     if (!data) return []
     const ranged = data.filter((r) => inRange(r, range))
     return source === 'all' ? ranged : ranged.filter((r) => r.source === source)
   }, [data, range, source])
+
+  const modelOptions = useMemo(() => {
+    const buckets = new Map<string, number>()
+    for (const record of sourceScopedRecords) {
+      buckets.set(record.model, (buckets.get(record.model) ?? 0) + (record.rawTotalTokens ?? record.totalTokens))
+    }
+    return [
+      { value: 'all', label: '全部模型' },
+      ...[...buckets.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([value]) => ({ value, label: value })),
+    ]
+  }, [sourceScopedRecords])
+
+  useEffect(() => {
+    if (model !== 'all' && !modelOptions.some((option) => option.value === model)) {
+      setModel('all')
+    }
+  }, [model, modelOptions])
+
+  const visibleRecords = useMemo(() => {
+    return model === 'all'
+      ? sourceScopedRecords
+      : sourceScopedRecords.filter((record) => record.model === model)
+  }, [model, sourceScopedRecords])
 
   const sessions = useMemo<SessionAggregate[]>(() => {
     let aggs = aggregateSessions(visibleRecords)
@@ -123,6 +150,12 @@ export default function SessionsPage() {
 
   const selected = sessions.find((s) => s.sessionId === selectedId) ?? null
 
+  useEffect(() => {
+    if (selectedId && !sessions.some((session) => session.sessionId === selectedId)) {
+      setSelectedId(null)
+    }
+  }, [selectedId, sessions])
+
   const handleSort = (k: SessionSortKey) => {
     if (sortKey === k) setSortDesc(!sortDesc)
     else {
@@ -147,6 +180,13 @@ export default function SessionsPage() {
         </div>
         <div className="flex items-center gap-2">
           <SourceTabs value={source} onChange={setSource} />
+          <Select
+            value={model}
+            onChange={setModel}
+            options={modelOptions}
+            aria-label="按模型筛选会话"
+            className="max-w-[220px]"
+          />
           <RangeSelect value={rangeValue} onChange={setRangeValue} options={RANGE_OPTIONS} />
         </div>
       </div>
@@ -225,7 +265,7 @@ export default function SessionsPage() {
             ) : sessions.length === 0 ? (
               <EmptyState
                 title={search ? '没有匹配的会话' : '当前时间窗内暂无会话'}
-                hint={search ? '换个关键词或清空搜索' : '尝试调整时间范围 / 来源筛选'}
+                hint={search ? '换个关键词或清空搜索' : '尝试调整时间范围 / 来源 / 模型筛选'}
               />
             ) : (
               <SessionList

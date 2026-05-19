@@ -64,6 +64,13 @@ interface OAuthFlowState {
   expiresAt: number
 }
 
+interface CockpitCodexAccount {
+  email?: string
+  account_id?: string
+  plan_type?: string
+  subscription_active_until?: string | null
+}
+
 const oauthFlows = new Map<string, OAuthFlowState>()
 
 function expandHome(value: string) {
@@ -161,6 +168,15 @@ async function readMetadata(): Promise<CodexCredentialMetaMap> {
       result[key] = {
         tags: Array.isArray(meta.tags) ? meta.tags.filter((tag): tag is string => typeof tag === 'string') : [],
         note: typeof meta.note === 'string' ? meta.note : '',
+        ...(typeof meta.subscriptionActiveUntil === 'string' && meta.subscriptionActiveUntil.trim()
+          ? { subscriptionActiveUntil: meta.subscriptionActiveUntil.trim() }
+          : {}),
+        ...(typeof meta.subscriptionPlan === 'string' && meta.subscriptionPlan.trim()
+          ? { subscriptionPlan: meta.subscriptionPlan.trim() }
+          : {}),
+        ...(typeof meta.subscriptionSource === 'string' && meta.subscriptionSource.trim()
+          ? { subscriptionSource: meta.subscriptionSource.trim() }
+          : {}),
       }
     }
     return result
@@ -177,6 +193,59 @@ async function writeMetadata(metadata: CodexCredentialMetaMap) {
 
 export async function getCodexCredentialMetas(): Promise<CodexCredentialMetaMap> {
   return readMetadata()
+}
+
+export async function importCodexSubscriptionFromCockpit(): Promise<CodexCredentialActionResult[]> {
+  const cockpitAccounts = await readCockpitCodexAccounts()
+  if (cockpitAccounts.length === 0) {
+    return [{ ok: false, message: '未在 Cockpit Tools 本地缓存中找到 Codex 账号有效期' }]
+  }
+
+  const subscriptions = cockpitAccounts.filter((account) =>
+    account.subscription_active_until && typeof account.subscription_active_until === 'string',
+  )
+  if (subscriptions.length === 0) {
+    return [{ ok: false, message: 'Cockpit Tools 账号缓存存在，但没有可用的订阅有效期字段' }]
+  }
+
+  const records = await authFileRecords()
+  const metadata = await readMetadata()
+  const results: CodexCredentialActionResult[] = []
+
+  for (const record of records) {
+    let auth: CredentialAuth
+    try {
+      auth = await readCredentialAuth(record)
+    } catch {
+      continue
+    }
+    const match = subscriptions.find((account) =>
+      (account.account_id && auth.tokens?.accountId && account.account_id === auth.tokens.accountId) ||
+      (account.email && account.email.toLowerCase() === auth.email.toLowerCase()),
+    )
+    if (!match?.subscription_active_until) continue
+
+    const key = codexCredentialKey(record)
+    metadata[key] = {
+      tags: metadata[key]?.tags || [],
+      note: metadata[key]?.note || '',
+      subscriptionActiveUntil: match.subscription_active_until,
+      ...(match.plan_type ? { subscriptionPlan: match.plan_type } : {}),
+      subscriptionSource: 'cockpit-tools',
+    }
+    results.push({
+      ok: true,
+      email: auth.email,
+      path: record.filePath,
+      message: `已同步 ${auth.email} 的有效期`,
+    })
+  }
+
+  if (results.length > 0) {
+    await writeMetadata(metadata)
+    return results
+  }
+  return [{ ok: false, message: `读取到 ${subscriptions.length} 个 Cockpit 有效期，但没有匹配到当前账号 JSON` }]
 }
 
 export async function startCodexOAuthLogin(): Promise<CodexOAuthLoginStartResponse> {
@@ -335,6 +404,9 @@ export async function setCodexCredentialMeta(
   const nextMeta = {
     tags: [...new Set(meta.tags.map((tag) => tag.trim()).filter(Boolean))].slice(0, 12),
     note: meta.note.trim(),
+    ...(meta.subscriptionActiveUntil ? { subscriptionActiveUntil: meta.subscriptionActiveUntil } : {}),
+    ...(meta.subscriptionPlan ? { subscriptionPlan: meta.subscriptionPlan } : {}),
+    ...(meta.subscriptionSource ? { subscriptionSource: meta.subscriptionSource } : {}),
   }
   const metadata = await readMetadata()
   metadata[credentialKey] = nextMeta
@@ -360,6 +432,99 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function stringField(record: Record<string, unknown>, key: string) {
   const value = record[key]
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+async function cockpitLevelDbFiles() {
+  const candidates = [
+    path.join(os.homedir(), 'AppData', 'Local', 'com.jlcodes.cockpit-tools', 'EBWebView', 'Default', 'Local Storage', 'leveldb'),
+    path.join(os.homedir(), 'AppData', 'Local', 'cockpit-tools', 'EBWebView', 'Default', 'Local Storage', 'leveldb'),
+  ]
+  const files: string[] = []
+  for (const directory of candidates) {
+    if (!(await pathExists(directory))) continue
+    const entries = await fs.readdir(directory, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.isFile() && /\.(?:log|ldb)$/i.test(entry.name)) {
+        files.push(path.join(directory, entry.name))
+      }
+    }
+  }
+  return files
+}
+
+function extractJsonAfterMarker(text: string, marker: string) {
+  const values: unknown[] = []
+  let markerIndex = text.indexOf(marker)
+  while (markerIndex >= 0) {
+    const start = text.indexOf('[', markerIndex)
+    if (start < 0) break
+    let depth = 0
+    let inString = false
+    let escaped = false
+    for (let index = start; index < text.length; index += 1) {
+      const char = text[index]
+      if (inString) {
+        if (escaped) {
+          escaped = false
+        } else if (char === '\\') {
+          escaped = true
+        } else if (char === '"') {
+          inString = false
+        }
+        continue
+      }
+      if (char === '"') {
+        inString = true
+      } else if (char === '[') {
+        depth += 1
+      } else if (char === ']') {
+        depth -= 1
+        if (depth === 0) {
+          try {
+            values.push(JSON.parse(text.slice(start, index + 1)))
+          } catch {
+            // Ignore stale or partially compacted LevelDB records.
+          }
+          break
+        }
+      }
+    }
+    markerIndex = text.indexOf(marker, markerIndex + marker.length)
+  }
+  return values
+}
+
+async function readCockpitCodexAccounts(): Promise<CockpitCodexAccount[]> {
+  const files = await cockpitLevelDbFiles()
+  const accounts = new Map<string, CockpitCodexAccount>()
+  for (const filePath of files) {
+    let text = ''
+    try {
+      text = await fs.readFile(filePath, 'utf8')
+    } catch {
+      continue
+    }
+    const values = extractJsonAfterMarker(text, 'agtools.codex.accounts.cache')
+    for (const value of values) {
+      if (!Array.isArray(value)) continue
+      for (const item of value) {
+        const account = asRecord(item)
+        if (!account) continue
+        const email = stringField(account, 'email')
+        const accountId = stringField(account, 'account_id')
+        const subscriptionActiveUntil = stringField(account, 'subscription_active_until')
+        if (!email && !accountId) continue
+        const key = accountId || email || JSON.stringify(account)
+        accounts.set(key, {
+          email,
+          account_id: accountId,
+          plan_type: stringField(account, 'plan_type'),
+          subscription_active_until: subscriptionActiveUntil || null,
+        })
+      }
+    }
+  }
+  return [...accounts.values()]
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {

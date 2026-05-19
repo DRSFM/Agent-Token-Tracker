@@ -84,6 +84,49 @@ test('estimateRequestValue prices Claude cache reads and cache writes separately
   assertApprox(value.totalUsd, 0.0007245)
 })
 
+test('estimateRequestValue prices opencode MiMo 2.5 Pro cache reads from official API tiers', () => {
+  const value = estimateRequestValue({
+    ...baseRecord,
+    source: 'opencode',
+    model: 'mimo-v2.5-pro',
+    inputTokens: 1_000,
+    outputTokens: 200,
+    cacheReadTokens: 500,
+    cacheCreationTokens: 100,
+    cacheTokens: 600,
+    rawTotalTokens: 1_800,
+    totalTokens: 1_350,
+  })
+
+  assert.equal(value.priced, true)
+  assert.equal(value.uncachedInputTokens, 1_000)
+  assert.equal(value.cacheReadTokens, 500)
+  assert.equal(value.cacheWriteTokens, 100)
+  assertApprox(value.inputUsd, 0.00105)
+  assertApprox(value.cachedInputUsd, 0.000105)
+  assertApprox(value.cacheWriteUsd, 0)
+  assertApprox(value.outputUsd, 0.00063)
+  assertApprox(value.totalUsd, 0.001785)
+})
+
+test('estimateRequestValue uses MiMo high-context tier above 256K tokens', () => {
+  const value = estimateRequestValue({
+    ...baseRecord,
+    source: 'opencode',
+    model: 'mimo2.5pro',
+    inputTokens: 300_000,
+    outputTokens: 10_000,
+    cacheTokens: 0,
+    rawTotalTokens: 310_000,
+    totalTokens: 310_000,
+  })
+
+  assert.equal(value.priced, true)
+  assertApprox(value.inputUsd, 0.63)
+  assertApprox(value.outputUsd, 0.063)
+  assertApprox(value.totalUsd, 0.693)
+})
+
 function assertApprox(actual: number, expected: number) {
   assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} should be close to ${expected}`)
 }
