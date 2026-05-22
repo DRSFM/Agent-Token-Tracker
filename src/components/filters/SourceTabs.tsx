@@ -1,4 +1,4 @@
-import { Sparkles, Code2, Boxes, TerminalSquare } from 'lucide-react'
+import { Sparkles, Code2, Boxes, TerminalSquare, Orbit } from 'lucide-react'
 import type { AgentSource } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -9,6 +9,7 @@ const TABS: { value: SourceFilter; label: string; icon: typeof Sparkles }[] = [
   { value: 'claude-code', label: 'Claude Code', icon: Sparkles },
   { value: 'codex', label: 'Codex', icon: Code2 },
   { value: 'opencode', label: 'opencode', icon: TerminalSquare },
+  { value: 'antigravity', label: 'Antigravity', icon: Orbit },
 ]
 
 export function SourceTabs({

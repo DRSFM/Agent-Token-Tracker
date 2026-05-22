@@ -16,6 +16,7 @@ import type {
 import { claudeCodeRoot, scanClaudeCode } from './scanners/claude'
 import { codexSessionsRoot, scanCodex } from './scanners/codex'
 import { openCodeDataRoot, scanOpenCode } from './scanners/opencode'
+import { antigravityDataRoot, scanAntigravity } from './scanners/antigravity'
 import { cacheKey, type CachedSourceFile, type SourceScanResult } from './scanners/shared'
 import {
   getRemoteSourceSettings,
@@ -39,7 +40,7 @@ interface ScanCacheFile {
   files: CachedSourceFile[]
 }
 
-const CACHE_VERSION = 3
+const CACHE_VERSION = 4
 const CACHE_FILE_NAME = 'scan-cache.json'
 
 const emptyState = (): ScanState => ({
@@ -203,7 +204,12 @@ export class TokenDataStore {
   private async runScan() {
     const cache = await loadScanCache()
     const remoteSettings = await getRemoteSourceSettings()
-    const scanTasks: Promise<SourceScanResult>[] = [scanClaudeCode(cache), scanCodex(cache), scanOpenCode(cache)]
+    const scanTasks: Promise<SourceScanResult>[] = [
+      scanClaudeCode(cache),
+      scanCodex(cache),
+      scanOpenCode(cache),
+      scanAntigravity(cache),
+    ]
 
     if (remoteSettings.enabled && remoteSettings.host) {
       const remoteLabel = remoteSettings.host
@@ -250,7 +256,7 @@ export class TokenDataStore {
   startWatching(onDataChanged: () => void) {
     if (this.watcher) return
 
-    this.watcher = chokidar.watch([claudeCodeRoot(), codexSessionsRoot(), openCodeDataRoot()], {
+    this.watcher = chokidar.watch([claudeCodeRoot(), codexSessionsRoot(), openCodeDataRoot(), antigravityDataRoot()], {
       ignoreInitial: true,
       awaitWriteFinish: {
         stabilityThreshold: 750,
@@ -259,7 +265,8 @@ export class TokenDataStore {
     })
 
     const schedule = (filePath: string) => {
-      if (!filePath.endsWith('.jsonl') && !path.basename(filePath).startsWith('opencode.db')) return
+      const basename = path.basename(filePath)
+      if (!filePath.endsWith('.jsonl') && !basename.startsWith('opencode.db') && !basename.endsWith('.db')) return
       if (this.watchTimer) clearTimeout(this.watchTimer)
       this.watchTimer = setTimeout(() => {
         void this.rescan().then(onDataChanged).catch(() => {})

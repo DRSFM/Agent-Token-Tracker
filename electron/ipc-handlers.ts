@@ -10,6 +10,7 @@ import { tokenDataStore } from './aggregator'
 import { claudeCodeRoot } from './scanners/claude'
 import { codexSessionsRoot } from './scanners/codex'
 import { openCodeDataRoot } from './scanners/opencode'
+import { antigravityDataRoot } from './scanners/antigravity'
 import {
   getRemoteSourceSettings,
   getRemoteSyncStatus,
@@ -104,13 +105,15 @@ export function registerIpcHandlers() {
           ? codexSessionsRoot()
           : kind === 'opencode'
             ? openCodeDataRoot()
-            : kind === 'ssh-readme'
-              ? app.isPackaged
-                ? path.join(process.resourcesPath, 'ssh.readme')
-                : path.join(app.getAppPath(), 'assets', 'ssh.readme')
-              : kind === 'remote-cache'
-                ? remoteCacheRoot()
-                : app.getPath('userData')
+            : kind === 'antigravity'
+              ? antigravityDataRoot()
+              : kind === 'ssh-readme'
+                ? app.isPackaged
+                  ? path.join(process.resourcesPath, 'ssh.readme')
+                  : path.join(app.getAppPath(), 'assets', 'ssh.readme')
+                : kind === 'remote-cache'
+                  ? remoteCacheRoot()
+                  : app.getPath('userData')
     const error = await shell.openPath(targetPath)
     return { ok: !error, path: targetPath, error: error || undefined }
   })

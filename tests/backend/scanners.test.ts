@@ -6,6 +6,7 @@ import test from 'node:test'
 import { scanClaudeCode } from '../../electron/scanners/claude'
 import { scanCodex } from '../../electron/scanners/codex'
 import { openCodeRowsToRecords } from '../../electron/scanners/opencode'
+import { antigravityRowsToRecords } from '../../electron/scanners/antigravity'
 import { cacheKey } from '../../electron/scanners/shared'
 import { readClaudeReplay, readCodexReplay } from '../../electron/replay'
 
@@ -182,6 +183,38 @@ test('openCodeRowsToRecords reads model and cache counters from assistant messag
   assert.equal(records[0].weightedTotalTokens, 15_075)
 })
 
+test('antigravityRowsToRecords reads model and token counters from gen_metadata protobuf', () => {
+  const timestamp = new Date('2026-05-20T05:48:09.123Z')
+  const rows = [
+    {
+      idx: 7,
+      dataHex: antigravityUsageHex({
+        model: 'claude-opus-4-6-thinking',
+        requestId: 'req_vrtx_demo',
+        inputTokens: 12_579,
+        outputTokens: 190,
+        timestamp,
+      }),
+      size: 100,
+    },
+  ]
+
+  const records = antigravityRowsToRecords(rows, 'C:\\Users\\demo\\.gemini\\antigravity\\conversations\\session-a.db', {
+    sessionId: 'session-a',
+    root: 'C:\\Users\\demo\\.gemini\\antigravity',
+  })
+
+  assert.equal(records.length, 1)
+  assert.equal(records[0].source, 'antigravity')
+  assert.equal(records[0].sessionId, 'session-a')
+  assert.equal(records[0].model, 'claude-opus-4-6-thinking')
+  assert.equal(records[0].inputTokens, 12_579)
+  assert.equal(records[0].outputTokens, 190)
+  assert.equal(records[0].rawTotalTokens, 12_769)
+  assert.equal(records[0].totalTokens, 12_769)
+  assert.equal(records[0].timestamp, timestamp.toISOString())
+})
+
 test('scanners reuse unchanged file cache entries', async () => {
   const root = await tempRoot('agent-token-cache')
   try {
@@ -216,6 +249,64 @@ test('scanners reuse unchanged file cache entries', async () => {
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+function antigravityUsageHex({
+  model,
+  requestId,
+  inputTokens,
+  outputTokens,
+  timestamp,
+}: {
+  model: string
+  requestId: string
+  inputTokens: number
+  outputTokens: number
+  timestamp: Date
+}) {
+  const usage = protoMessage([
+    protoVarint(2, inputTokens),
+    protoVarint(3, outputTokens),
+    protoString(11, requestId),
+  ])
+  const time = protoMessage([
+    protoVarint(1, Math.floor(timestamp.getTime() / 1000)),
+    protoVarint(2, (timestamp.getTime() % 1000) * 1_000_000),
+  ])
+  const timing = protoMessage([protoBytes(4, time)])
+  const envelope = protoMessage([protoBytes(4, usage), protoBytes(9, timing), protoString(19, model)])
+  return protoMessage([protoBytes(1, envelope)]).toString('hex')
+}
+
+function protoMessage(parts: Buffer[]) {
+  return Buffer.concat(parts)
+}
+
+function protoString(fieldNumber: number, value: string) {
+  return protoBytes(fieldNumber, Buffer.from(value, 'utf8'))
+}
+
+function protoBytes(fieldNumber: number, value: Buffer) {
+  return Buffer.concat([protoTag(fieldNumber, 2), protoVarintRaw(value.length), value])
+}
+
+function protoVarint(fieldNumber: number, value: number) {
+  return Buffer.concat([protoTag(fieldNumber, 0), protoVarintRaw(value)])
+}
+
+function protoTag(fieldNumber: number, wireType: number) {
+  return protoVarintRaw((fieldNumber << 3) | wireType)
+}
+
+function protoVarintRaw(value: number) {
+  const bytes: number[] = []
+  let remaining = BigInt(value)
+  while (remaining >= 0x80n) {
+    bytes.push(Number((remaining & 0x7fn) | 0x80n))
+    remaining >>= 7n
+  }
+  bytes.push(Number(remaining))
+  return Buffer.from(bytes)
+}
 
 test('readClaudeReplay reconstructs messages tools and usage events', async () => {
   const root = await tempRoot('agent-token-replay-claude')

@@ -12,6 +12,7 @@ export const SOURCE_LABEL: Record<AgentSource, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
   opencode: 'opencode',
+  antigravity: 'Antigravity',
   unknown: '未知',
 }
 
@@ -19,6 +20,7 @@ export const SOURCE_COLOR: Record<AgentSource, string> = {
   'claude-code': '#8b5cf6',
   codex: '#10b981',
   opencode: '#0ea5e9',
+  antigravity: '#f59e0b',
   unknown: '#94a3b8',
 }
 
@@ -233,7 +235,7 @@ export function aggregateDailyBySource(
     const k = dateKey(cursor)
     buckets.set(k, {
       date: k,
-      bySource: { 'claude-code': 0, codex: 0, opencode: 0, unknown: 0 },
+      bySource: { 'claude-code': 0, codex: 0, opencode: 0, antigravity: 0, unknown: 0 },
       total: 0,
     })
     cursor.setDate(cursor.getDate() + 1)

@@ -15,7 +15,7 @@
 // ============================================================
 
 /** 已知的 agent 工具来源 */
-export type AgentSource = 'claude-code' | 'codex' | 'opencode' | 'unknown'
+export type AgentSource = 'claude-code' | 'codex' | 'opencode' | 'antigravity' | 'unknown'
 
 /** 单条请求记录 (一次模型调用) */
 export interface RequestRecord {

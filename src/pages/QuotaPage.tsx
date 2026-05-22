@@ -28,6 +28,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
 import { api, isMock } from '@/lib/api'
 import { formatRelativeMinutes } from '@/lib/format'
+import { quotaPrimaryLimitLabel, quotaSecondaryLimitLabel, shouldShowSecondaryLimit } from '@/lib/quota-labels'
 import { cn } from '@/lib/utils'
 import type {
   CodexCredentialActionResult,
@@ -764,8 +765,8 @@ function GroupTable({
                 <tr className="border-b border-slate-200/70 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
                   <th className="w-[26%] py-2 pr-3 font-medium">账号</th>
                   <th className="w-[10%] py-2 pr-3 font-medium">状态</th>
-                  <th className="w-[12%] py-2 pr-3 font-medium">5h 剩余</th>
-                  <th className="w-[12%] py-2 pr-3 font-medium">7d 剩余</th>
+                  <th className="w-[12%] py-2 pr-3 font-medium">主要剩余</th>
+                  <th className="w-[12%] py-2 pr-3 font-medium">次要剩余</th>
                   <th className="w-[18%] py-2 pr-3 font-medium">重置时间</th>
                   <th className="w-[22%] py-2 font-medium">操作</th>
                 </tr>
@@ -912,8 +913,18 @@ function AccountCard({
         </div>
       ) : (
         <div className="mt-4 space-y-4">
-          <QuotaLimitRow label="5 小时限额" value={quota.primaryRemainingPercent} resetAt={quota.primaryResetAt} />
-          <QuotaLimitRow label="7 天限额" value={quota.secondaryRemainingPercent} resetAt={quota.secondaryResetAt} />
+          <QuotaLimitRow
+            label={quotaPrimaryLimitLabel(quota)}
+            value={quota.primaryRemainingPercent}
+            resetAt={quota.primaryResetAt}
+          />
+          {shouldShowSecondaryLimit(quota) && (
+            <QuotaLimitRow
+              label={quotaSecondaryLimitLabel(quota)}
+              value={quota.secondaryRemainingPercent}
+              resetAt={quota.secondaryResetAt}
+            />
+          )}
         </div>
       )}
       <SubscriptionValidity meta={meta} />

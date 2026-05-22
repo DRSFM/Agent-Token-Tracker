@@ -1,6 +1,6 @@
 import type { RequestRecord } from '@/types/api'
 import { formatNumber, formatTime, isToday } from '@/lib/format'
-import { Sparkles, Code2, Bot, TerminalSquare } from 'lucide-react'
+import { Sparkles, Code2, Bot, TerminalSquare, Orbit } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 interface Props {
@@ -11,6 +11,7 @@ const sourceIcon: Record<string, LucideIcon> = {
   'claude-code': Sparkles,
   codex: Code2,
   opencode: TerminalSquare,
+  antigravity: Orbit,
   unknown: Bot,
 }
 
@@ -18,6 +19,7 @@ const sourceColor: Record<string, string> = {
   'claude-code': 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300',
   codex: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300',
   opencode: 'bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-300',
+  antigravity: 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300',
   unknown: 'bg-slate-100 text-slate-500 dark:bg-slate-700/60 dark:text-slate-300',
 }
 

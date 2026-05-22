@@ -23,7 +23,7 @@ export function StackedSourceChart({ data }: Props) {
       const dt = new Date(d.date)
       return `${dt.getMonth() + 1}/${dt.getDate()}`
     })
-    const sources: AgentSource[] = ['claude-code', 'codex', 'opencode', 'unknown']
+    const sources: AgentSource[] = ['claude-code', 'codex', 'opencode', 'antigravity', 'unknown']
     // 隐藏始终为 0 的来源系列
     const present = sources.filter((s) => data.some((d) => d.bySource[s] > 0))
 

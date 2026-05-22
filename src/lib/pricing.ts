@@ -63,6 +63,28 @@ const OPENAI_API_RATES: { test: RegExp; rate: DynamicApiTokenRate }[] = [
     rate: { inputUsdPerMillion: 1.75, cachedInputUsdPerMillion: 0.175, outputUsdPerMillion: 14 },
   },
   {
+    test: /^gemini[-_]?3\.?5[-_]?flash\b/i,
+    rate: { inputUsdPerMillion: 1.5, cachedInputUsdPerMillion: 0.15, outputUsdPerMillion: 9 },
+  },
+  {
+    test: /^gemini[-_]?3[-_]?flash\b/i,
+    rate: { inputUsdPerMillion: 0.5, cachedInputUsdPerMillion: 0.05, outputUsdPerMillion: 3 },
+  },
+  {
+    test: /^gemini[-_]?3\.?1[-_]?pro\b|^geminipro3\.?1\b|^gemini[-_]?3[-_]?pro\b/i,
+    rate: {
+      inputUsdPerMillion: 2,
+      cachedInputUsdPerMillion: 0.2,
+      outputUsdPerMillion: 12,
+      thresholdTokens: 200_000,
+      highContextRate: {
+        inputUsdPerMillion: 4,
+        cachedInputUsdPerMillion: 0.4,
+        outputUsdPerMillion: 18,
+      },
+    },
+  },
+  {
     test: /^claude-(?:.+-)?opus-4-[765]\b/i,
     rate: { inputUsdPerMillion: 5, cachedInputUsdPerMillion: 0.5, cacheWriteUsdPerMillion: 6.25, outputUsdPerMillion: 25 },
   },
@@ -150,7 +172,7 @@ export function estimateRequestValue(record: RequestRecord): EstimatedRequestVal
   }
 
   const hasSeparateCacheCounters =
-    (record.source === 'claude-code' || record.source === 'opencode') &&
+    (record.source === 'claude-code' || record.source === 'opencode' || record.source === 'antigravity') &&
     (record.cacheReadTokens !== undefined || record.cacheCreationTokens !== undefined)
   const cacheReadTokens = hasSeparateCacheCounters
     ? Math.max(record.cacheReadTokens ?? 0, 0)

@@ -127,6 +127,42 @@ test('estimateRequestValue uses MiMo high-context tier above 256K tokens', () =>
   assertApprox(value.totalUsd, 0.693)
 })
 
+test('estimateRequestValue prices Antigravity Gemini 3.5 Flash at official standard tier', () => {
+  const value = estimateRequestValue({
+    ...baseRecord,
+    source: 'antigravity',
+    model: 'gemini-3.5-flash',
+    inputTokens: 1_000,
+    outputTokens: 200,
+    cacheTokens: 0,
+    rawTotalTokens: 1_200,
+    totalTokens: 1_200,
+  })
+
+  assert.equal(value.priced, true)
+  assertApprox(value.inputUsd, 0.0015)
+  assertApprox(value.outputUsd, 0.0018)
+  assertApprox(value.totalUsd, 0.0033)
+})
+
+test('estimateRequestValue prices Antigravity Gemini 3.1 Pro high-context tier above 200K tokens', () => {
+  const value = estimateRequestValue({
+    ...baseRecord,
+    source: 'antigravity',
+    model: 'gemini-3.1-pro-low',
+    inputTokens: 210_000,
+    outputTokens: 10_000,
+    cacheTokens: 0,
+    rawTotalTokens: 220_000,
+    totalTokens: 220_000,
+  })
+
+  assert.equal(value.priced, true)
+  assertApprox(value.inputUsd, 0.84)
+  assertApprox(value.outputUsd, 0.18)
+  assertApprox(value.totalUsd, 1.02)
+})
+
 function assertApprox(actual: number, expected: number) {
   assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} should be close to ${expected}`)
 }
