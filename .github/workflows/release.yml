@@ -82,8 +82,6 @@ jobs:
   build-npm:
     name: Build npm package
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,9 +89,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org/
+
+      - name: Update npm
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -113,8 +114,8 @@ jobs:
           path: agent-token-tracker-*.tgz
 
       - name: Publish npm package
-        if: startsWith(github.ref, 'refs/tags/') && env.NODE_AUTH_TOKEN != ''
-        run: npm publish --provenance --access public
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm publish --access public
 
   publish-release:
     name: Publish GitHub Release
