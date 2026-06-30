@@ -1,8 +1,8 @@
-import { app } from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { RemoteSourceSettings, RemoteSyncStatus } from '../src/types/api'
+import { getUserDataPath } from './app-paths'
 
 const SETTINGS_FILE = 'remote-source-settings.json'
 const STATUS_FILE = 'remote-sync-status.json'
@@ -17,15 +17,15 @@ const defaultSettings: RemoteSourceSettings = {
 }
 
 function remoteSettingsPath() {
-  return path.join(app.getPath('userData'), SETTINGS_FILE)
+  return path.join(getUserDataPath(), SETTINGS_FILE)
 }
 
 function remoteStatusPath() {
-  return path.join(app.getPath('userData'), STATUS_FILE)
+  return path.join(getUserDataPath(), STATUS_FILE)
 }
 
 export function remoteCacheRoot() {
-  return path.join(app.getPath('userData'), 'remote-cache', 'default')
+  return path.join(getUserDataPath(), 'remote-cache', 'default')
 }
 
 export function remoteClaudeCacheRoot() {

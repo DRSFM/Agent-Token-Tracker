@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.2.13] - 2026-06-30
+
+### Fixed
+- 修复 Linux npm 包构建测试在 Electron 二进制安装异常时导入 `electron` 失败的问题
+- Release workflow 恢复 npm 包构建为发布前置条件，确保 tag 发布时 Windows、macOS、npm 三组产物都通过
+
 ## [1.2.12] - 2026-06-30
 
 ### Fixed

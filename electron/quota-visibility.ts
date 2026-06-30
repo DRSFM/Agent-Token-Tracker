@@ -1,14 +1,14 @@
-import { app } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { QuotaVisibilitySettings } from '../src/types/api'
+import { getUserDataPath } from './app-paths'
 
 const defaultSettings: QuotaVisibilitySettings = {
   hiddenAccounts: [],
 }
 
 function settingsPath() {
-  return path.join(app.getPath('userData'), 'quota-visibility.json')
+  return path.join(getUserDataPath(), 'quota-visibility.json')
 }
 
 function normalizeHiddenAccounts(value: unknown) {

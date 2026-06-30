@@ -1,7 +1,7 @@
-import { app } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { NetworkSettings } from '../src/types/api'
+import { getUserDataPath } from './app-paths'
 
 const SETTINGS_FILE = 'network-settings.json'
 
@@ -12,7 +12,7 @@ const defaultSettings: NetworkSettings = {
 let settings: NetworkSettings | null = null
 
 function settingsPath() {
-  return path.join(app.getPath('userData'), SETTINGS_FILE)
+  return path.join(getUserDataPath(), SETTINGS_FILE)
 }
 
 function normalizeProxyUrl(value: unknown) {

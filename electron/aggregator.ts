@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import chokidar, { type FSWatcher } from 'chokidar'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -23,6 +22,7 @@ import {
   remoteClaudeCacheRoot,
   remoteCodexCacheRoot,
 } from './remote-sync'
+import { getUserDataPath } from './app-paths'
 
 interface ScanState {
   records: RequestRecord[]
@@ -55,7 +55,7 @@ const emptyState = (): ScanState => ({
 })
 
 function cacheFilePath() {
-  return path.join(app.getPath('userData'), CACHE_FILE_NAME)
+  return path.join(getUserDataPath(), CACHE_FILE_NAME)
 }
 
 export function scanCacheFilePath() {
