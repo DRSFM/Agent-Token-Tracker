@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-06-30
+
+### Fixed
+- GitHub Release 发布不再被 npm 包构建任务阻塞，Windows/macOS 安装包构建成功即可发布 exe/dmg 资产
+
 ## [1.2.11] - 2026-06-30
 
 ### Added
