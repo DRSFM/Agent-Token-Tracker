@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import tls from 'node:tls'
 import type {
+  CodexRateLimitResetCreditsResult,
   QuotaAccountGroup,
   QuotaAccountStatus,
   QuotaGroupSummary,
@@ -18,6 +19,7 @@ const DEFAULT_AUTH_DIR = path.join(os.homedir(), '.cli-proxy-api')
 const DEFAULT_CONFIG_DIR = path.join(DEFAULT_AUTH_DIR, 'usage-dashboard')
 const EXTRA_AUTH_DIRS = ['F:\\vscode代码\\cpa凭证学习']
 const QUOTA_URL = 'https://chatgpt.com/backend-api/wham/usage'
+const RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits'
 const TOKEN_ENDPOINT = 'https://auth.openai.com/oauth/token'
 const CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const REFRESH_MS = 60_000
@@ -77,6 +79,23 @@ interface UsageResponse {
   credits?: {
     balance?: unknown
   }
+}
+
+interface RateLimitResetCreditResponseItem {
+  status?: unknown
+  title?: unknown
+  granted_at?: unknown
+  expires_at?: unknown
+}
+
+interface RateLimitResetCreditsResponse {
+  available_count?: unknown
+  credits?: RateLimitResetCreditResponseItem[]
+  data?: {
+    available_count?: unknown
+    credits?: RateLimitResetCreditResponseItem[]
+  }
+  items?: RateLimitResetCreditResponseItem[]
 }
 
 let cachedStatus: QuotaStatus | null = null
@@ -320,7 +339,7 @@ function parseJsonResponse(
   statusCode: number,
   statusMessage: string | undefined,
   chunks: Buffer[],
-  resolve: (value: UsageResponse) => void,
+  resolve: (value: unknown) => void,
   reject: (reason?: unknown) => void,
 ) {
   if (statusCode < 200 || statusCode >= 300) {
@@ -328,13 +347,13 @@ function parseJsonResponse(
     return
   }
   try {
-    resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) as UsageResponse)
+    resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))
   } catch {
     reject(new Error('Invalid JSON response'))
   }
 }
 
-function getJsonDirect(url: string, token: string, accountId?: string): Promise<UsageResponse> {
+function getJsonDirect<T>(url: string, token: string, accountId?: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const request = https.request(
       url,
@@ -343,7 +362,7 @@ function getJsonDirect(url: string, token: string, accountId?: string): Promise<
         const chunks: Buffer[] = []
         response.on('data', (chunk: Buffer) => chunks.push(chunk))
         response.on('end', () => {
-          parseJsonResponse(response.statusCode || 0, response.statusMessage, chunks, resolve, reject)
+          parseJsonResponse(response.statusCode || 0, response.statusMessage, chunks, resolve as (value: unknown) => void, reject)
         })
       },
     )
@@ -355,7 +374,7 @@ function getJsonDirect(url: string, token: string, accountId?: string): Promise<
   })
 }
 
-function getJsonViaHttpProxy(url: string, token: string, accountId: string | undefined, proxyUrl: string): Promise<UsageResponse> {
+function getJsonViaHttpProxy<T>(url: string, token: string, accountId: string | undefined, proxyUrl: string): Promise<T> {
   const target = new URL(url)
   const proxy = new URL(proxyUrl)
   const targetPort = Number(target.port || 443)
@@ -406,7 +425,7 @@ function getJsonViaHttpProxy(url: string, token: string, accountId: string | und
           const chunks: Buffer[] = []
           response.on('data', (chunk: Buffer) => chunks.push(chunk))
           response.on('end', () => {
-            parseJsonResponse(response.statusCode || 0, response.statusMessage, chunks, resolve, reject)
+            parseJsonResponse(response.statusCode || 0, response.statusMessage, chunks, resolve as (value: unknown) => void, reject)
           })
         },
       )
@@ -419,18 +438,41 @@ function getJsonViaHttpProxy(url: string, token: string, accountId: string | und
   })
 }
 
-async function getJson(url: string, token: string, accountId?: string): Promise<UsageResponse> {
+async function getJson<T>(url: string, token: string, accountId?: string): Promise<T> {
   const { quotaProxyUrl } = await getNetworkSettings()
-  if (quotaProxyUrl) return getJsonViaHttpProxy(url, token, accountId, quotaProxyUrl)
-  return getJsonDirect(url, token, accountId)
+  if (quotaProxyUrl) return getJsonViaHttpProxy<T>(url, token, accountId, quotaProxyUrl)
+  return getJsonDirect<T>(url, token, accountId)
 }
 
-function refreshTokens(refreshToken: string): Promise<TokenResponse> {
-  const body = new URLSearchParams({
+function tokenRefreshBody(refreshToken: string) {
+  return new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: CODEX_CLIENT_ID,
   }).toString()
+}
+
+function parseTokenResponse(
+  statusCode: number,
+  statusMessage: string | undefined,
+  chunks: Buffer[],
+  resolve: (value: TokenResponse) => void,
+  reject: (reason?: unknown) => void,
+) {
+  const responseBody = Buffer.concat(chunks).toString('utf8')
+  if (statusCode < 200 || statusCode >= 300) {
+    reject(new HttpStatusError(statusCode, statusMessage))
+    return
+  }
+  try {
+    resolve(JSON.parse(responseBody) as TokenResponse)
+  } catch {
+    reject(new Error('Token 刷新失败：响应不是有效 JSON'))
+  }
+}
+
+function refreshTokensDirect(refreshToken: string): Promise<TokenResponse> {
+  const body = tokenRefreshBody(refreshToken)
 
   return new Promise((resolve, reject) => {
     const request = https.request(
@@ -447,16 +489,7 @@ function refreshTokens(refreshToken: string): Promise<TokenResponse> {
         const chunks: Buffer[] = []
         response.on('data', (chunk: Buffer) => chunks.push(chunk))
         response.on('end', () => {
-          const responseBody = Buffer.concat(chunks).toString('utf8')
-          if ((response.statusCode || 0) < 200 || (response.statusCode || 0) >= 300) {
-            reject(new HttpStatusError(response.statusCode || 0, response.statusMessage))
-            return
-          }
-          try {
-            resolve(JSON.parse(responseBody) as TokenResponse)
-          } catch {
-            reject(new Error('Token 刷新失败：响应不是有效 JSON'))
-          }
+          parseTokenResponse(response.statusCode || 0, response.statusMessage, chunks, resolve, reject)
         })
       },
     )
@@ -464,6 +497,82 @@ function refreshTokens(refreshToken: string): Promise<TokenResponse> {
     request.on('error', reject)
     request.end(body)
   })
+}
+
+function refreshTokensViaHttpProxy(refreshToken: string, proxyUrl: string): Promise<TokenResponse> {
+  const body = tokenRefreshBody(refreshToken)
+  const target = new URL(TOKEN_ENDPOINT)
+  const proxy = new URL(proxyUrl)
+  const targetPort = Number(target.port || 443)
+  const proxyPort = Number(proxy.port || 80)
+  const auth =
+    proxy.username || proxy.password
+      ? Buffer.from(`${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`).toString('base64')
+      : ''
+
+  return new Promise((resolve, reject) => {
+    const connectRequest = http.request({
+      host: proxy.hostname,
+      port: proxyPort,
+      method: 'CONNECT',
+      path: `${target.hostname}:${targetPort}`,
+      headers: auth ? { 'Proxy-Authorization': `Basic ${auth}` } : undefined,
+    })
+
+    connectRequest.setTimeout(20_000, () => {
+      connectRequest.destroy(new Error('Proxy CONNECT timeout'))
+    })
+
+    connectRequest.on('connect', (response, socket) => {
+      if ((response.statusCode || 0) < 200 || (response.statusCode || 0) >= 300) {
+        socket.destroy()
+        reject(new Error(`Proxy CONNECT ${response.statusCode || 0}: ${response.statusMessage || 'Request failed'}`))
+        return
+      }
+
+      const tlsSocket = tls.connect({
+        socket,
+        servername: target.hostname,
+      })
+
+      tlsSocket.setTimeout(20_000, () => {
+        tlsSocket.destroy(new Error('Token 刷新超时'))
+      })
+
+      const request = https.request(
+        {
+          method: 'POST',
+          host: target.hostname,
+          path: `${target.pathname}${target.search}`,
+          servername: target.hostname,
+          createConnection: () => tlsSocket,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(body),
+            Accept: 'application/json',
+          },
+        },
+        (tokenResponse) => {
+          const chunks: Buffer[] = []
+          tokenResponse.on('data', (chunk: Buffer) => chunks.push(chunk))
+          tokenResponse.on('end', () => {
+            parseTokenResponse(tokenResponse.statusCode || 0, tokenResponse.statusMessage, chunks, resolve, reject)
+          })
+        },
+      )
+      request.on('error', reject)
+      request.end(body)
+    })
+
+    connectRequest.on('error', reject)
+    connectRequest.end()
+  })
+}
+
+async function refreshTokens(refreshToken: string): Promise<TokenResponse> {
+  const { quotaProxyUrl } = await getNetworkSettings()
+  if (quotaProxyUrl) return refreshTokensViaHttpProxy(refreshToken, quotaProxyUrl)
+  return refreshTokensDirect(refreshToken)
 }
 
 async function writeRefreshedTokens(filePath: string, auth: AuthFile, refreshed: TokenResponse) {
@@ -500,14 +609,97 @@ async function getQuotaWithTokenRefresh(record: AuthRecord, auth: AuthFile) {
   }
 
   try {
-    return await getJson(QUOTA_URL, tokens.accessToken, tokens.accountId)
+    return await getJson<UsageResponse>(QUOTA_URL, tokens.accessToken, tokens.accountId)
   } catch (error) {
     if (!tokens.refreshToken || !shouldRetryWithRefresh(error)) throw error
     const refreshed = await refreshTokens(tokens.refreshToken)
     await writeRefreshedTokens(record.filePath, auth, refreshed)
     const refreshedTokens = resolveAuthTokens(auth)
     if (!refreshedTokens) throw new Error('missing access_token')
-    return getJson(QUOTA_URL, refreshedTokens.accessToken, refreshedTokens.accountId)
+    return getJson<UsageResponse>(QUOTA_URL, refreshedTokens.accessToken, refreshedTokens.accountId)
+  }
+}
+
+async function getResetCreditsWithTokenRefresh(record: AuthRecord, auth: AuthFile) {
+  let tokens = resolveAuthTokens(auth)
+  if (!tokens) throw new Error('missing access_token')
+
+  if (tokens.refreshToken && isJwtExpiredSoon(tokens.accessToken)) {
+    const refreshed = await refreshTokens(tokens.refreshToken)
+    await writeRefreshedTokens(record.filePath, auth, refreshed)
+    tokens = resolveAuthTokens(auth)
+    if (!tokens) throw new Error('missing access_token')
+  }
+
+  try {
+    return await getJson<RateLimitResetCreditsResponse>(RESET_CREDITS_URL, tokens.accessToken, tokens.accountId)
+  } catch (error) {
+    if (!tokens.refreshToken || !shouldRetryWithRefresh(error)) throw error
+    const refreshed = await refreshTokens(tokens.refreshToken)
+    await writeRefreshedTokens(record.filePath, auth, refreshed)
+    const refreshedTokens = resolveAuthTokens(auth)
+    if (!refreshedTokens) throw new Error('missing access_token')
+    return getJson<RateLimitResetCreditsResponse>(
+      RESET_CREDITS_URL,
+      refreshedTokens.accessToken,
+      refreshedTokens.accountId,
+    )
+  }
+}
+
+function stringValue(value: unknown) {
+  if (value === null || value === undefined) return ''
+  return typeof value === 'string' ? value : String(value)
+}
+
+function numberOrNull(value: unknown) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function resetCreditItems(response: RateLimitResetCreditsResponse) {
+  if (Array.isArray(response.credits)) return response.credits
+  if (Array.isArray(response.data?.credits)) return response.data.credits
+  if (Array.isArray(response.items)) return response.items
+  return []
+}
+
+async function resetCreditsAuthRecord(credentialKey?: string): Promise<AuthRecord> {
+  if (credentialKey) {
+    const records = await authFileRecords()
+    const record = records.find((item) => quotaAccountKey(item) === credentialKey)
+    if (!record) throw new Error('未找到该 Codex 凭证，可能已被移动或隐藏')
+    return record
+  }
+
+  const authPath = path.join(os.homedir(), '.codex', 'auth.json')
+  if (!(await pathExists(authPath))) throw new Error(`未找到 Codex auth.json：${authPath}`)
+  return {
+    filePath: authPath,
+    accountGroup: '自己的账号',
+    groupRoot: path.dirname(authPath),
+  }
+}
+
+export async function getCodexRateLimitResetCredits(
+  credentialKey?: string,
+): Promise<CodexRateLimitResetCreditsResult> {
+  const record = await resetCreditsAuthRecord(credentialKey)
+  const auth = JSON.parse(await fs.readFile(record.filePath, 'utf8')) as AuthFile
+  const response = await getResetCreditsWithTokenRefresh(record, auth)
+  const dataRecord = asRecord(response.data)
+  const availableCount = numberOrNull(response.available_count ?? dataRecord?.available_count)
+
+  return {
+    availableCount,
+    credits: resetCreditItems(response).map((credit) => ({
+      status: stringValue(credit.status),
+      title: stringValue(credit.title),
+      grantedAt: stringValue(credit.granted_at),
+      expiresAt: stringValue(credit.expires_at),
+    })),
+    email: auth.email || fallbackEmail(record.filePath),
+    queriedAt: new Date().toISOString(),
   }
 }
 

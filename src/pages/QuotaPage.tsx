@@ -4,11 +4,13 @@ import {
   CalendarDays,
   Check,
   Clock3,
+  Coins,
   Copy,
   Database,
   Download,
   EyeOff,
   FileJson,
+  FolderOpen,
   KeyRound,
   LayoutGrid,
   List,
@@ -35,6 +37,7 @@ import type {
   CodexCredentialMeta,
   CodexCredentialMetaMap,
   CodexOAuthLoginStartResponse,
+  CodexRateLimitResetCreditsResult,
   QuotaAccountGroup,
   QuotaAccountStatus,
   QuotaStatus,
@@ -45,7 +48,7 @@ const GROUPS: QuotaAccountGroup[] = ['自己的账号', '其余来源']
 const HIDDEN_QUOTA_ACCOUNTS_STORAGE_KEY = 'agent-token-tracker:hidden-quota-accounts'
 type QuotaScope = 'all' | QuotaAccountGroup
 type QuotaViewMode = 'table' | 'cards'
-type CredentialAction = 'cli' | 'launch' | 'refresh' | 'export' | 'delete'
+type CredentialAction = 'cli' | 'folder' | 'launch' | 'refresh' | 'export' | 'delete' | 'credits'
 
 const scopeOptions: Array<{ value: QuotaScope; label: string }> = [
   { value: 'all', label: '全部' },
@@ -79,6 +82,21 @@ function formatSubscriptionTime(value?: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).replace(/\//g, '-')
+}
+
+function formatCreditTime(value: string) {
+  if (!value) return '未返回'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -172,18 +190,22 @@ function CredentialActions({
   quota,
   busyActionKey,
   onOpenCli,
+  onOpenFolder,
   onEditMeta,
   onLaunch,
   onRefresh,
+  onQueryResetCredits,
   onExport,
   onDelete,
 }: {
   quota: QuotaAccountStatus
   busyActionKey: string
   onOpenCli: (quota: QuotaAccountStatus) => void
+  onOpenFolder: (quota: QuotaAccountStatus) => void
   onEditMeta: (quota: QuotaAccountStatus) => void
   onLaunch: (quota: QuotaAccountStatus) => void
   onRefresh: (quota: QuotaAccountStatus) => void
+  onQueryResetCredits: (quota: QuotaAccountStatus) => void
   onExport: (quota: QuotaAccountStatus) => void
   onDelete: (quota: QuotaAccountStatus) => void
 }) {
@@ -195,6 +217,12 @@ function CredentialActions({
         title={`CLI 启动 ${quota.email}`}
         onClick={() => onOpenCli(quota)}
         disabled={busyActionKey === actionKey('cli', quota)}
+      />
+      <ActionButton
+        icon={FolderOpen}
+        title={`打开凭证文件夹 ${quota.email}`}
+        onClick={() => onOpenFolder(quota)}
+        disabled={busyActionKey === actionKey('folder', quota)}
       />
       <ActionButton icon={Tag} title={`标签与备注 ${quota.email}`} onClick={() => onEditMeta(quota)} />
       <ActionButton
@@ -208,6 +236,12 @@ function CredentialActions({
         title={`刷新配额 ${quota.email}`}
         onClick={() => onRefresh(quota)}
         disabled={busyActionKey === actionKey('refresh', quota)}
+      />
+      <ActionButton
+        icon={Coins}
+        title={`查询重置次数 ${quota.email}`}
+        onClick={() => onQueryResetCredits(quota)}
+        disabled={busyActionKey === actionKey('credits', quota)}
       />
       <ActionButton
         icon={Upload}
@@ -726,9 +760,11 @@ function GroupTable({
   busyActionKey,
   onHide,
   onOpenCli,
+  onOpenFolder,
   onEditMeta,
   onLaunch,
   onRefresh,
+  onQueryResetCredits,
   onExport,
   onDelete,
 }: {
@@ -738,9 +774,11 @@ function GroupTable({
   busyActionKey: string
   onHide: (quota: QuotaAccountStatus) => void
   onOpenCli: (quota: QuotaAccountStatus) => void
+  onOpenFolder: (quota: QuotaAccountStatus) => void
   onEditMeta: (quota: QuotaAccountStatus) => void
   onLaunch: (quota: QuotaAccountStatus) => void
   onRefresh: (quota: QuotaAccountStatus) => void
+  onQueryResetCredits: (quota: QuotaAccountStatus) => void
   onExport: (quota: QuotaAccountStatus) => void
   onDelete: (quota: QuotaAccountStatus) => void
 }) {
@@ -812,9 +850,11 @@ function GroupTable({
                             quota={quota}
                             busyActionKey={busyActionKey}
                             onOpenCli={onOpenCli}
+                            onOpenFolder={onOpenFolder}
                             onEditMeta={onEditMeta}
                             onLaunch={onLaunch}
                             onRefresh={onRefresh}
+                            onQueryResetCredits={onQueryResetCredits}
                             onExport={onExport}
                             onDelete={onDelete}
                           />
@@ -839,9 +879,11 @@ function AccountCard({
   busyActionKey,
   onHide,
   onOpenCli,
+  onOpenFolder,
   onEditMeta,
   onLaunch,
   onRefresh,
+  onQueryResetCredits,
   onExport,
   onDelete,
 }: {
@@ -850,9 +892,11 @@ function AccountCard({
   busyActionKey: string
   onHide: (quota: QuotaAccountStatus) => void
   onOpenCli: (quota: QuotaAccountStatus) => void
+  onOpenFolder: (quota: QuotaAccountStatus) => void
   onEditMeta: (quota: QuotaAccountStatus) => void
   onLaunch: (quota: QuotaAccountStatus) => void
   onRefresh: (quota: QuotaAccountStatus) => void
+  onQueryResetCredits: (quota: QuotaAccountStatus) => void
   onExport: (quota: QuotaAccountStatus) => void
   onDelete: (quota: QuotaAccountStatus) => void
 }) {
@@ -934,9 +978,11 @@ function AccountCard({
           quota={quota}
           busyActionKey={busyActionKey}
           onOpenCli={onOpenCli}
+          onOpenFolder={onOpenFolder}
           onEditMeta={onEditMeta}
           onLaunch={onLaunch}
           onRefresh={onRefresh}
+          onQueryResetCredits={onQueryResetCredits}
           onExport={onExport}
           onDelete={onDelete}
         />
@@ -952,9 +998,11 @@ function GroupCards({
   busyActionKey,
   onHide,
   onOpenCli,
+  onOpenFolder,
   onEditMeta,
   onLaunch,
   onRefresh,
+  onQueryResetCredits,
   onExport,
   onDelete,
 }: {
@@ -964,9 +1012,11 @@ function GroupCards({
   busyActionKey: string
   onHide: (quota: QuotaAccountStatus) => void
   onOpenCli: (quota: QuotaAccountStatus) => void
+  onOpenFolder: (quota: QuotaAccountStatus) => void
   onEditMeta: (quota: QuotaAccountStatus) => void
   onLaunch: (quota: QuotaAccountStatus) => void
   onRefresh: (quota: QuotaAccountStatus) => void
+  onQueryResetCredits: (quota: QuotaAccountStatus) => void
   onExport: (quota: QuotaAccountStatus) => void
   onDelete: (quota: QuotaAccountStatus) => void
 }) {
@@ -994,9 +1044,11 @@ function GroupCards({
                 busyActionKey={busyActionKey}
                 onHide={onHide}
                 onOpenCli={onOpenCli}
+                onOpenFolder={onOpenFolder}
                 onEditMeta={onEditMeta}
                 onLaunch={onLaunch}
                 onRefresh={onRefresh}
+                onQueryResetCredits={onQueryResetCredits}
                 onExport={onExport}
                 onDelete={onDelete}
               />
@@ -1092,6 +1144,9 @@ export default function QuotaPage() {
   const [actionError, setActionError] = useState('')
   const [showAddAccountModal, setShowAddAccountModal] = useState(false)
   const [syncingCockpitSubscription, setSyncingCockpitSubscription] = useState(false)
+  const [resetCredits, setResetCredits] = useState<CodexRateLimitResetCreditsResult | null>(null)
+  const [resetCreditsError, setResetCreditsError] = useState('')
+  const [queryingResetCreditsKey, setQueryingResetCreditsKey] = useState('')
 
   const load = useCallback(async (force = false) => {
     if (force) setRefreshing(true)
@@ -1249,6 +1304,13 @@ export default function QuotaPage() {
     [runCredentialAction],
   )
 
+  const openCredentialFolder = useCallback(
+    (quota: QuotaAccountStatus) => {
+      void runCredentialAction('folder', quota, api.openCodexCredentialFolder)
+    },
+    [runCredentialAction],
+  )
+
   const launchCodex = useCallback(
     (quota: QuotaAccountStatus) => {
       void runCredentialAction('launch', quota, api.launchCodexWithCredential)
@@ -1267,6 +1329,25 @@ export default function QuotaPage() {
     },
     [load, runCredentialAction],
   )
+
+  const queryResetCredits = useCallback(async (quota?: QuotaAccountStatus) => {
+    const key = quota ? quotaAccountKey(quota) : ''
+    if (quota) setBusyActionKey(actionKey('credits', quota))
+    setQueryingResetCreditsKey(key || 'current')
+    setResetCredits(null)
+    setResetCreditsError('')
+    setActionResult(null)
+    setActionError('')
+    try {
+      const result = await api.getCodexRateLimitResetCredits(key || undefined)
+      setResetCredits(result)
+    } catch (err) {
+      setResetCreditsError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setQueryingResetCreditsKey('')
+      if (quota) setBusyActionKey('')
+    }
+  }, [])
 
   const exportCredential = useCallback(
     (quota: QuotaAccountStatus) => {
@@ -1452,6 +1533,15 @@ export default function QuotaPage() {
           </button>
           <button
             type="button"
+            onClick={() => void queryResetCredits()}
+            disabled={queryingResetCreditsKey === 'current'}
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-60 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
+          >
+            <Coins className={cn('h-3.5 w-3.5', queryingResetCreditsKey === 'current' && 'animate-pulse')} />
+            查询重置次数
+          </button>
+          <button
+            type="button"
             onClick={() => load(true)}
             disabled={refreshing}
             className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200/70 bg-white/80 px-3 text-sm text-slate-700 transition hover:bg-white disabled:opacity-60 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -1506,6 +1596,78 @@ export default function QuotaPage() {
           <span>{actionError || actionResult?.message}</span>
           {actionResult?.path && <span className="break-all text-xs opacity-80">{actionResult.path}</span>}
         </div>
+      )}
+
+      {(resetCredits || resetCreditsError) && (
+        <Card>
+          <CardHeader
+            title="重置次数"
+            subtitle={
+              resetCredits
+                ? `${resetCredits.email || '当前 Codex 账号'} · 查询于 ${formatCreditTime(resetCredits.queriedAt)}`
+                : '查询失败'
+            }
+            action={
+              <span className="rounded-lg bg-amber-100 p-2 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                <Coins className="h-4 w-4" />
+              </span>
+            }
+          />
+          <CardBody className="pt-3">
+            {resetCreditsError ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                {formatQuotaError(resetCreditsError)}
+              </div>
+            ) : resetCredits && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                    <div className="text-xs text-amber-700/80 dark:text-amber-200/80">available_count</div>
+                    <div className="mt-1 text-2xl font-bold tabular-nums text-amber-800 dark:text-amber-100">
+                      {resetCredits.availableCount ?? '未返回'}
+                    </div>
+                  </div>
+                </div>
+                {resetCredits.credits.length === 0 ? (
+                  <EmptyState title="暂无重置记录" hint="接口没有返回 credits 列表" className="py-6" />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[720px] w-full table-fixed text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200/70 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                          <th className="w-[18%] py-2 pr-3 font-medium">状态</th>
+                          <th className="w-[34%] py-2 pr-3 font-medium">标题</th>
+                          <th className="w-[24%] py-2 pr-3 font-medium">发放时间</th>
+                          <th className="w-[24%] py-2 font-medium">过期时间</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                        {resetCredits.credits.map((credit, index) => (
+                          <tr key={`${credit.status}:${credit.title}:${index}`}>
+                            <td className="py-3 pr-3">
+                              <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                {credit.status || '未返回'}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-3 text-slate-700 dark:text-slate-200">
+                              {credit.title || '未返回'}
+                            </td>
+                            <td className="py-3 pr-3 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                              {formatCreditTime(credit.grantedAt)}
+                            </td>
+                            <td className="py-3 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                              {formatCreditTime(credit.expiresAt)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardBody>
+        </Card>
       )}
 
       {error ? (
@@ -1608,9 +1770,11 @@ export default function QuotaPage() {
                     busyActionKey={busyActionKey}
                     onHide={hideQuota}
                     onOpenCli={openCli}
+                    onOpenFolder={openCredentialFolder}
                     onEditMeta={setEditingMetaQuota}
                     onLaunch={launchCodex}
                     onRefresh={refreshQuota}
+                    onQueryResetCredits={(quota) => void queryResetCredits(quota)}
                     onExport={exportCredential}
                     onDelete={deleteCredential}
                   />
@@ -1623,9 +1787,11 @@ export default function QuotaPage() {
                     busyActionKey={busyActionKey}
                     onHide={hideQuota}
                     onOpenCli={openCli}
+                    onOpenFolder={openCredentialFolder}
                     onEditMeta={setEditingMetaQuota}
                     onLaunch={launchCodex}
                     onRefresh={refreshQuota}
+                    onQueryResetCredits={(quota) => void queryResetCredits(quota)}
                     onExport={exportCredential}
                     onDelete={deleteCredential}
                   />

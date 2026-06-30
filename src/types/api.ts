@@ -251,6 +251,20 @@ export interface SyncQuotaToCpaResult {
   message?: string
 }
 
+export interface CodexRateLimitResetCredit {
+  status: string
+  title: string
+  grantedAt: string
+  expiresAt: string
+}
+
+export interface CodexRateLimitResetCreditsResult {
+  availableCount: number | null
+  credits: CodexRateLimitResetCredit[]
+  email?: string
+  queriedAt: string
+}
+
 export type ReplayEventRole = 'user' | 'assistant' | 'system' | 'tool' | 'event'
 
 export type ReplayEventType =
@@ -385,6 +399,9 @@ export interface TokenAPI {
   /** 触发后端同步余量到 CPA 路由。只返回数量汇总，不返回敏感原文。 */
   syncQuotaToCpa(): Promise<SyncQuotaToCpaResult>
 
+  /** 查询 Codex rate-limit reset credits。token 仅在主进程使用，不返回前端。 */
+  getCodexRateLimitResetCredits(credentialKey?: string): Promise<CodexRateLimitResetCreditsResult>
+
   /** 获取 Codex 凭证标签与备注。 */
   getCodexCredentialMetas(): Promise<CodexCredentialMetaMap>
 
@@ -396,6 +413,9 @@ export interface TokenAPI {
 
   /** 使用选中凭证启动隔离 CODEX_HOME 的 Codex CLI。 */
   openCodexCliWithCredential(credentialKey: string): Promise<CodexCredentialActionResult>
+
+  /** 打开选中凭证 JSON 所在文件夹。 */
+  openCodexCredentialFolder(credentialKey: string): Promise<CodexCredentialActionResult>
 
   /** 将选中凭证写入当前 CODEX_HOME 并启动 Codex。 */
   launchCodexWithCredential(credentialKey: string): Promise<CodexCredentialActionResult>

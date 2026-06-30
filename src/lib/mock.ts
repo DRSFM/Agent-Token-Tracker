@@ -407,6 +407,21 @@ export const mockAPI: TokenAPI = {
       syncedAt: new Date().toISOString(),
     }
   },
+  async getCodexRateLimitResetCredits() {
+    return {
+      availableCount: 2,
+      email: 'codex-primary@example.com',
+      queriedAt: new Date().toISOString(),
+      credits: [
+        {
+          status: 'available',
+          title: 'Mock reset credit',
+          grantedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        },
+      ],
+    }
+  },
   async getCodexCredentialMetas() {
     return {
       '自己的账号:codex-primary@example.com.json': {
@@ -426,6 +441,9 @@ export const mockAPI: TokenAPI = {
   },
   async openCodexCliWithCredential() {
     return { ok: true, message: 'Mock：已启动隔离 Codex CLI。' }
+  },
+  async openCodexCredentialFolder() {
+    return { ok: true, path: 'mock-credential-folder', message: 'Mock：已打开凭证文件夹。' }
   },
   async launchCodexWithCredential() {
     return { ok: true, message: 'Mock：已切换并启动 Codex。' }

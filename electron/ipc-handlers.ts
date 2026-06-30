@@ -28,7 +28,7 @@ import {
   installUpdate,
   setUpdateSettings,
 } from './updater'
-import { getQuotaStatus } from './quota'
+import { getCodexRateLimitResetCredits, getQuotaStatus } from './quota'
 import { getQuotaVisibilitySettings, setQuotaVisibilitySettings } from './quota-visibility'
 import { syncQuotaToCpa } from './cpa-sync'
 import { getNetworkSettings, setNetworkSettings } from './network-settings'
@@ -43,6 +43,7 @@ import {
   importCodexSubscriptionFromCockpit,
   importCurrentCodexAuth,
   launchCodexWithCredential,
+  openCodexCredentialFolder,
   openCodexCliWithCredential,
   setCodexCredentialMeta,
   startCodexOAuthLogin,
@@ -140,6 +141,9 @@ export function registerIpcHandlers() {
     setQuotaVisibilitySettings(settings),
   )
   ipcMain.handle('token:syncQuotaToCpa', async () => syncQuotaToCpa())
+  ipcMain.handle('token:getCodexRateLimitResetCredits', async (_e, credentialKey?: string) =>
+    getCodexRateLimitResetCredits(credentialKey),
+  )
   ipcMain.handle('token:getCodexCredentialMetas', async () => getCodexCredentialMetas())
   ipcMain.handle('token:importCodexSubscriptionFromCockpit', async () => importCodexSubscriptionFromCockpit())
   ipcMain.handle('token:setCodexCredentialMeta', async (_e, credentialKey, meta) =>
@@ -147,6 +151,9 @@ export function registerIpcHandlers() {
   )
   ipcMain.handle('token:openCodexCliWithCredential', async (_e, credentialKey: string) =>
     openCodexCliWithCredential(credentialKey),
+  )
+  ipcMain.handle('token:openCodexCredentialFolder', async (_e, credentialKey: string) =>
+    openCodexCredentialFolder(credentialKey),
   )
   ipcMain.handle('token:launchCodexWithCredential', async (_e, credentialKey: string) =>
     launchCodexWithCredential(credentialKey),

@@ -1061,6 +1061,17 @@ export async function openCodexCliWithCredential(credentialKey: string): Promise
   }
 }
 
+export async function openCodexCredentialFolder(credentialKey: string): Promise<CodexCredentialActionResult> {
+  const record = await findCredentialRecord(credentialKey)
+  const folderPath = path.dirname(record.filePath)
+  const error = await shell.openPath(folderPath)
+  return {
+    ok: !error,
+    path: folderPath,
+    message: error || '已打开凭证文件夹',
+  }
+}
+
 export async function launchCodexWithCredential(credentialKey: string): Promise<CodexCredentialActionResult> {
   const record = await findCredentialRecord(credentialKey)
   const codexHome = resolveCodexHome()

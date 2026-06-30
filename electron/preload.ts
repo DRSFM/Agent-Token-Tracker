@@ -29,12 +29,16 @@ const api: TokenAPI = {
   getQuotaVisibilitySettings: () => ipcRenderer.invoke('token:getQuotaVisibilitySettings'),
   setQuotaVisibilitySettings: (settings) => ipcRenderer.invoke('token:setQuotaVisibilitySettings', settings),
   syncQuotaToCpa: () => ipcRenderer.invoke('token:syncQuotaToCpa'),
+  getCodexRateLimitResetCredits: (credentialKey) =>
+    ipcRenderer.invoke('token:getCodexRateLimitResetCredits', credentialKey),
   getCodexCredentialMetas: () => ipcRenderer.invoke('token:getCodexCredentialMetas'),
   importCodexSubscriptionFromCockpit: () => ipcRenderer.invoke('token:importCodexSubscriptionFromCockpit'),
   setCodexCredentialMeta: (credentialKey, meta) =>
     ipcRenderer.invoke('token:setCodexCredentialMeta', credentialKey, meta),
   openCodexCliWithCredential: (credentialKey) =>
     ipcRenderer.invoke('token:openCodexCliWithCredential', credentialKey),
+  openCodexCredentialFolder: (credentialKey) =>
+    ipcRenderer.invoke('token:openCodexCredentialFolder', credentialKey),
   launchCodexWithCredential: (credentialKey) =>
     ipcRenderer.invoke('token:launchCodexWithCredential', credentialKey),
   exportCodexCredential: (credentialKey) =>

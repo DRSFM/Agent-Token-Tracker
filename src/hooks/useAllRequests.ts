@@ -1,16 +1,13 @@
 // 拉取并缓存"全量请求记录"，供 Sessions / Models / Trends 页客户端聚合
 //
 // 后端 getRecentRequests(N) 已经返回完整 RequestRecord（含 source / sessionId
-// / model / tokens 等），我们一次拉一个大数（默认 50000），三个页面共用同一份。
+// / model / tokens 等）。这里用于“全部”类页面，所以请求完整扫描结果，三个页面共用同一份。
 // 监听 onDataChanged 后增量重拉。
-//
-// 后续如果记录量真的大到 50000 条以上，再请 Codex 加分页 / 过滤接口（已在
-// HANDOFF_FOR_CODEX.md 列出）。
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import type { RequestRecord } from '@/types/api'
 
-const FETCH_LIMIT = 50_000
+const FETCH_LIMIT = Number.MAX_SAFE_INTEGER
 
 interface CacheEntry {
   data: RequestRecord[] | null
