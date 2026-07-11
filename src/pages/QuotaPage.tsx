@@ -19,6 +19,7 @@ import {
   RefreshCcw,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
   Tag,
   Terminal,
   Trash2,
@@ -29,15 +30,18 @@ import {
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
 import { api, isMock } from '@/lib/api'
-import { formatRelativeMinutes } from '@/lib/format'
+import { formatCompact, formatRelativeMinutes, formatUsd } from '@/lib/format'
 import { quotaPrimaryLimitLabel, quotaSecondaryLimitLabel, shouldShowSecondaryLimit } from '@/lib/quota-labels'
 import { cn } from '@/lib/utils'
+import { useAllRequests } from '@/hooks/useAllRequests'
+import { summarizeCodexUsage, type CodexUsagePeriod } from '@/lib/codex-usage'
 import type {
   CodexCredentialActionResult,
   CodexCredentialMeta,
   CodexCredentialMetaMap,
   CodexOAuthLoginStartResponse,
   CodexRateLimitResetCreditsResult,
+  GrokUsageStatus,
   QuotaAccountGroup,
   QuotaAccountStatus,
   QuotaStatus,
@@ -707,6 +711,179 @@ function QuotaBar({ value, className }: { value: number | null; className?: stri
   )
 }
 
+function GrokUsageCard({ status }: { status: GrokUsageStatus | null }) {
+  const remaining = status?.monthlyRemainingPercent ?? null
+  return (
+    <Card className="overflow-hidden border-slate-300/70 bg-slate-950 text-slate-100 dark:border-slate-700">
+      <CardBody className="relative">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-bl from-white/10 via-transparent to-transparent" />
+        <div className="relative space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/10">
+                  <Sparkles className="h-4 w-4" />
+                </span>
+                Grok CLI
+              </div>
+              <div className="mt-1 text-xs text-slate-400">
+                {status?.email || (status?.authFound ? '已登录' : '未发现 Grok 登录')}
+              </div>
+            </div>
+            {status?.plan && (
+              <span className="rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200">
+                {status.plan}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
+              {formatCompact(status?.sessionCount ?? 0)} sessions
+            </span>
+            <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
+              {formatCompact(status?.totalTokens ?? 0)} tokens
+            </span>
+            {status?.lastSessionAt && (
+              <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm text-slate-300">
+                {formatRelativeMinutes(status.lastSessionAt)} 活跃
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-[auto_minmax(120px,1fr)_auto] items-center gap-3">
+            <span className="rounded-lg bg-cyan-400/15 px-3 py-2 text-sm font-semibold text-cyan-300">月度</span>
+            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-cyan-400 transition-[width] duration-300"
+                style={{ width: `${remaining === null ? 0 : Math.max(0, Math.min(100, remaining))}%` }}
+              />
+            </div>
+            <div className="text-right text-sm tabular-nums text-slate-300">
+              <span className="font-semibold text-white">剩余 {quotaLabel(remaining)}</span>
+              {status?.resetsAt && <span className="ml-2 text-slate-400">{formatSubscriptionTime(status.resetsAt)}</span>}
+            </div>
+          </div>
+
+          {status?.error && (
+            <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+              本地统计可用；在线额度暂不可用：{status.error}
+            </div>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+function CodexPeriodMetrics({ period }: { period: CodexUsagePeriod }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
+        {formatCompact(period.requestCount)} req
+      </span>
+      <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
+        {formatCompact(period.totalTokens)} tokens
+      </span>
+      <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
+        估算 {formatUsd(period.estimated.totalUsd)}
+      </span>
+      <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-300">
+        非缓存 {formatUsd(period.estimated.nonCachedUsd)}
+      </span>
+    </div>
+  )
+}
+
+function CodexUsageWindow({
+  label,
+  period,
+  usedPercent,
+  resetAt,
+  tone,
+}: {
+  label: string
+  period: CodexUsagePeriod
+  usedPercent: number | null
+  resetAt: string
+  tone: 'violet' | 'emerald'
+}) {
+  const percent = usedPercent === null ? 0 : Math.max(0, Math.min(100, usedPercent))
+  const labelTone = tone === 'violet' ? 'bg-violet-400/15 text-violet-300' : 'bg-emerald-400/15 text-emerald-300'
+  const barTone = tone === 'violet' ? 'bg-violet-400' : 'bg-emerald-400'
+  return (
+    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={cn('rounded-lg px-3 py-2 text-sm font-semibold', labelTone)}>{label}</span>
+        <CodexPeriodMetrics period={period} />
+      </div>
+      <div className="grid grid-cols-[minmax(120px,1fr)_auto] items-center gap-3">
+        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+          <div className={cn('h-full rounded-full transition-[width] duration-300', barTone)} style={{ width: `${percent}%` }} />
+        </div>
+        <div className="text-right text-sm tabular-nums text-slate-300">
+          <span className="font-semibold text-white">{usedPercent === null ? '额度未知' : `已用 ${usedPercent}%`}</span>
+          {resetAt && <span className="ml-2 text-slate-400">{resetAt}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CodexUsageCard({
+  records,
+  quota,
+}: {
+  records: import('@/types/api').RequestRecord[]
+  quota: QuotaAccountStatus | null
+}) {
+  const summary = useMemo(() => summarizeCodexUsage(records), [records])
+  return (
+    <Card className="overflow-hidden border-slate-300/70 bg-slate-950 text-slate-100 dark:border-slate-700">
+      <CardBody className="relative">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5" />
+        <div className="relative space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/10">
+                  <Terminal className="h-4 w-4" />
+                </span>
+                Codex 本机用量与估算计费
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                滚动 5 小时 / 7 天本地记录；额度参照 {quota?.email || '当前可用账号'}
+              </p>
+            </div>
+            {quota?.plan && (
+              <span className="rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-xs font-semibold uppercase text-slate-200">
+                {quota.plan}
+              </span>
+            )}
+          </div>
+          <CodexUsageWindow
+            label={quotaPrimaryLimitLabel({ plan: quota?.plan ?? '' })}
+            period={summary.fiveHours}
+            usedPercent={quota?.primaryUsedPercent ?? null}
+            resetAt={quota?.primaryResetAt ?? ''}
+            tone="violet"
+          />
+          <CodexUsageWindow
+            label={quotaSecondaryLimitLabel({ plan: quota?.plan ?? '' })}
+            period={summary.sevenDays}
+            usedPercent={quota?.secondaryUsedPercent ?? null}
+            resetAt={quota?.secondaryResetAt ?? ''}
+            tone="emerald"
+          />
+          <p className="text-xs leading-5 text-slate-500">
+            金额按公开 API 单价估算，不是订阅账单；本地日志无法可靠区分多个 Codex 登录账号，因此请求与费用按本机合计。
+          </p>
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
 function QuotaLimitRow({
   label,
   value,
@@ -1126,7 +1303,9 @@ function HiddenAccountsPanel({
 }
 
 export default function QuotaPage() {
+  const allRequests = useAllRequests()
   const [status, setStatus] = useState<QuotaStatus | null>(null)
+  const [grokStatus, setGrokStatus] = useState<GrokUsageStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -1152,10 +1331,13 @@ export default function QuotaPage() {
     if (force) setRefreshing(true)
     setError(null)
     try {
-      const next = await api.getQuotaStatus(force)
-      setStatus(next)
-    } catch (err) {
-      setError(err)
+      const [quotaResult, grokResult] = await Promise.allSettled([
+        api.getQuotaStatus(force),
+        api.getGrokUsageStatus(force),
+      ])
+      if (quotaResult.status === 'fulfilled') setStatus(quotaResult.value)
+      else setError(quotaResult.reason)
+      if (grokResult.status === 'fulfilled') setGrokStatus(grokResult.value)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -1454,6 +1636,14 @@ export default function QuotaPage() {
     .map((quota) => quota.secondaryRemainingPercent)
     .filter((value): value is number => value !== null)
     .sort((a, b) => a - b)[0]
+  const usageReferenceQuota = useMemo(
+    () =>
+      visibleQuotas.find((quota) => quota.accountGroup === '自己的账号' && !quota.error) ??
+      visibleQuotas.find((quota) => !quota.error) ??
+      visibleQuotas[0] ??
+      null,
+    [visibleQuotas],
+  )
 
   return (
     <div className="space-y-5 pt-2">
@@ -1669,6 +1859,9 @@ export default function QuotaPage() {
           </CardBody>
         </Card>
       )}
+
+      <CodexUsageCard records={allRequests.data ?? []} quota={usageReferenceQuota} />
+      <GrokUsageCard status={grokStatus} />
 
       {error ? (
         <Card>

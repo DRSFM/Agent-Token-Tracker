@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { promisify } from 'node:util'
 import type { RequestRecord } from '../../src/types/api'
 import {
   asNumber,
@@ -16,8 +14,7 @@ import {
   type JsonlFileMetadata,
   type SourceScanResult,
 } from './shared'
-
-const execFileAsync = promisify(execFile)
+import { querySqliteRows } from '../sqlite'
 
 const ANTIGRAVITY_USAGE_QUERY = `
 select idx, hex(data) as dataHex, size
@@ -80,6 +77,7 @@ export async function scanAntigravity(
   const cacheEntries: CachedSourceFile[] = []
   let parsedFiles = 0
   let reusedFiles = 0
+  let lastError: string | undefined
 
   for (const dbFile of dbFiles) {
     const cached = reusableCachedFile('antigravity', dbFile, cache)
@@ -102,9 +100,8 @@ export async function scanAntigravity(
         root,
       }))
       parsedFiles += 1
-    } catch {
-      // Antigravity stores usage as protobuf blobs inside SQLite. If sqlite3 is
-      // unavailable or a database is locked, let the other sources keep working.
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
     }
 
     records.push(...fileRecords)
@@ -129,6 +126,7 @@ export async function scanAntigravity(
     reusedFiles,
     rootExists,
     cacheEntries,
+    lastError,
   }
 }
 
@@ -177,24 +175,13 @@ async function getAntigravityDbMetadata(dbPath: string): Promise<AntigravityDbFi
 }
 
 async function readAntigravityUsageRows(dbPath: string) {
-  const { stdout } = await execFileAsync(
-    'sqlite3',
-    ['-json', dbPath, ANTIGRAVITY_USAGE_QUERY],
-    { encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
-  )
-  const parsed = JSON.parse(stdout || '[]')
-  return Array.isArray(parsed) ? parsed as AntigravityUsageRow[] : []
+  return querySqliteRows<AntigravityUsageRow>(dbPath, ANTIGRAVITY_USAGE_QUERY)
 }
 
 async function readAntigravityTrajectory(dbPath: string): Promise<AntigravityTrajectoryRow | null> {
   try {
-    const { stdout } = await execFileAsync(
-      'sqlite3',
-      ['-json', dbPath, ANTIGRAVITY_TRAJECTORY_QUERY],
-      { encoding: 'utf8', windowsHide: true, maxBuffer: 1024 * 1024 },
-    )
-    const parsed = JSON.parse(stdout || '[]')
-    return Array.isArray(parsed) ? parsed[0] as AntigravityTrajectoryRow | undefined ?? null : null
+    const rows = await querySqliteRows<AntigravityTrajectoryRow>(dbPath, ANTIGRAVITY_TRAJECTORY_QUERY)
+    return rows[0] ?? null
   } catch {
     return null
   }

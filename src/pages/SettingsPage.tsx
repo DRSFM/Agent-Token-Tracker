@@ -764,6 +764,11 @@ export default function SettingsPage() {
                   <code className="block mt-1 text-xs text-slate-400 truncate">
                     {source.rootPath}
                   </code>
+                  {source.lastError && (
+                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-300 break-words">
+                      {source.lastError}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"

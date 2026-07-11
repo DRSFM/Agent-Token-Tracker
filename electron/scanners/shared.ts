@@ -15,6 +15,7 @@ export interface SourceScanResult {
   reusedFiles: number
   rootExists: boolean
   cacheEntries: CachedSourceFile[]
+  lastError?: string
 }
 
 export interface JsonlFileMetadata {

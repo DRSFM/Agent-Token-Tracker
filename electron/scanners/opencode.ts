@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { promisify } from 'node:util'
 import type { RequestRecord } from '../../src/types/api'
 import {
   asNumber,
@@ -17,8 +15,7 @@ import {
   type JsonlFileMetadata,
   type SourceScanResult,
 } from './shared'
-
-const execFileAsync = promisify(execFile)
+import { querySqliteRows } from '../sqlite'
 
 const OPENCODE_USAGE_QUERY = `
 select
@@ -66,6 +63,7 @@ export async function scanOpenCode(
   const cacheEntries: CachedSourceFile[] = []
   let parsedFiles = 0
   let reusedFiles = 0
+  let lastError: string | undefined
 
   if (metadata) {
     const cached = reusableCachedFile('opencode', metadata, cache)
@@ -78,9 +76,8 @@ export async function scanOpenCode(
         const rows = await readOpenCodeUsageRows(dbPath)
         records.push(...openCodeRowsToRecords(rows, dbPath))
         parsedFiles = 1
-      } catch {
-        // opencode stores usage in SQLite. If sqlite3 is not available or the
-        // database is locked, the other sources should still scan normally.
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error)
       }
 
       cacheEntries.push({
@@ -105,6 +102,7 @@ export async function scanOpenCode(
     reusedFiles,
     rootExists,
     cacheEntries,
+    lastError,
   }
 }
 
@@ -131,25 +129,7 @@ async function getOpenCodeDbMetadata(dbPath: string): Promise<JsonlFileMetadata 
 }
 
 async function readOpenCodeUsageRows(dbPath: string) {
-  try {
-    const { stdout } = await execFileAsync(
-      'opencode',
-      ['db', '--format', 'json', OPENCODE_USAGE_QUERY],
-      { encoding: 'utf8', windowsHide: true, maxBuffer: 32 * 1024 * 1024 },
-    )
-    const parsed = JSON.parse(stdout || '[]')
-    return Array.isArray(parsed) ? parsed as OpenCodeUsageRow[] : []
-  } catch {
-    // Fall back to sqlite3 for environments where opencode itself is not on PATH.
-  }
-
-  const { stdout } = await execFileAsync(
-    'sqlite3',
-    ['-json', dbPath, OPENCODE_USAGE_QUERY],
-    { encoding: 'utf8', windowsHide: true, maxBuffer: 32 * 1024 * 1024 },
-  )
-  const parsed = JSON.parse(stdout || '[]')
-  return Array.isArray(parsed) ? parsed as OpenCodeUsageRow[] : []
+  return querySqliteRows<OpenCodeUsageRow>(dbPath, OPENCODE_USAGE_QUERY)
 }
 
 export function openCodeRowsToRecords(rows: OpenCodeUsageRow[], dbPath: string): RequestRecord[] {

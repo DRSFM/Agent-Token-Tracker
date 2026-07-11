@@ -1,7 +1,7 @@
 {
   "name": "agent-token-tracker",
-  "version": "1.2.13",
-  "description": "本地 Agent Token 计数器 — 估算 Claude Code / Codex 等本地 CLI 工具的 token 消耗",
+  "version": "1.2.14",
+  "description": "本地 Agent Token 计数器 — 估算 Claude Code、Codex、OpenCode、Antigravity、Grok 等工具的 token 消耗",
   "author": "Token Dashboard Contributors",
   "license": "MIT",
   "repository": {
@@ -15,6 +15,7 @@
   "keywords": [
     "claude-code",
     "codex",
+    "grok",
     "token-tracker",
     "electron",
     "agent",
@@ -35,6 +36,7 @@
     "dist-electron/preload.js",
     "assets/",
     "README.md",
+    "THIRD_PARTY_NOTICES.md",
     "package.json"
   ],
   "scripts": {
@@ -62,6 +64,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
+    "sqlite3": "^6.0.1",
     "tailwind-merge": "^2.5.4",
     "zustand": "^5.0.1"
   },
@@ -92,6 +95,7 @@
       "dist/**/*",
       "dist-electron/**/*",
       "assets/**/*",
+      "THIRD_PARTY_NOTICES.md",
       "!node_modules/electron/**/*",
       "!node_modules/@electron/**/*"
     ],

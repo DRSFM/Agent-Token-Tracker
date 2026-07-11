@@ -7,6 +7,7 @@ import { scanClaudeCode } from '../../electron/scanners/claude'
 import { scanCodex } from '../../electron/scanners/codex'
 import { openCodeRowsToRecords } from '../../electron/scanners/opencode'
 import { antigravityRowsToRecords } from '../../electron/scanners/antigravity'
+import { scanGrok } from '../../electron/scanners/grok'
 import { cacheKey } from '../../electron/scanners/shared'
 import { readClaudeReplay, readCodexReplay } from '../../electron/replay'
 
@@ -245,6 +246,37 @@ test('scanners reuse unchanged file cache entries', async () => {
     assert.equal(second.parsedFiles, 0)
     assert.equal(second.reusedFiles, 1)
     assert.equal(second.records[0].totalTokens, 30)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test('scanGrok summarizes local signals without requiring the Grok executable', async () => {
+  const root = await tempRoot('agent-token-grok')
+  try {
+    const project = encodeURIComponent('F:\\workspace\\grok-demo')
+    const filePath = path.join(root, 'sessions', project, 'grok-session-1', 'signals.json')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, JSON.stringify({
+      totalTokensBeforeCompaction: 100,
+      contextTokensUsed: 25,
+      primaryModelId: 'grok-build',
+      modelsUsed: ['grok-build', 'grok-code-fast'],
+    }), 'utf8')
+    const timestamp = new Date('2026-07-09T08:43:44.000Z')
+    await fs.utimes(filePath, timestamp, timestamp)
+
+    const result = await scanGrok(new Map(), root)
+
+    assert.equal(result.records.length, 1)
+    assert.equal(result.parsedFiles, 1)
+    assert.equal(result.records[0].source, 'grok')
+    assert.equal(result.records[0].sessionId, 'grok-session-1')
+    assert.equal(result.records[0].sessionTitle, 'grok-demo')
+    assert.equal(result.records[0].model, 'grok-build')
+    assert.equal(result.records[0].rawTotalTokens, 125)
+    assert.equal(result.records[0].totalTokens, 125)
+    assert.equal(result.records[0].timestamp, timestamp.toISOString())
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

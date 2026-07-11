@@ -17,7 +17,6 @@ import { getQuotaVisibilitySettings } from './quota-visibility'
 const ACCOUNT_GROUPS: QuotaAccountGroup[] = ['自己的账号', '其余来源']
 const DEFAULT_AUTH_DIR = path.join(os.homedir(), '.cli-proxy-api')
 const DEFAULT_CONFIG_DIR = path.join(DEFAULT_AUTH_DIR, 'usage-dashboard')
-const EXTRA_AUTH_DIRS = ['F:\\vscode代码\\cpa凭证学习']
 const QUOTA_URL = 'https://chatgpt.com/backend-api/wham/usage'
 const RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits'
 const TOKEN_ENDPOINT = 'https://auth.openai.com/oauth/token'
@@ -131,7 +130,7 @@ async function pathExists(targetPath: string) {
 async function resolveAuthDirs() {
   const configDir = expandHome(process.env.CLIPROXY_USAGE_DASHBOARD_DIR || DEFAULT_CONFIG_DIR)
   const configPath = path.join(configDir, 'config.json')
-  const dirs = [DEFAULT_AUTH_DIR, ...EXTRA_AUTH_DIRS]
+  const dirs = [DEFAULT_AUTH_DIR]
   try {
     const config = JSON.parse(await fs.readFile(configPath, 'utf8')) as { auth_dir?: string }
     if (config.auth_dir) dirs.unshift(expandHome(config.auth_dir))

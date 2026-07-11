@@ -11,6 +11,7 @@ import { claudeCodeRoot } from './scanners/claude'
 import { codexSessionsRoot } from './scanners/codex'
 import { openCodeDataRoot } from './scanners/opencode'
 import { antigravityDataRoot } from './scanners/antigravity'
+import { grokDataRoot } from './scanners/grok'
 import {
   getRemoteSourceSettings,
   getRemoteSyncStatus,
@@ -29,6 +30,7 @@ import {
   setUpdateSettings,
 } from './updater'
 import { getCodexRateLimitResetCredits, getQuotaStatus } from './quota'
+import { getGrokUsageStatus } from './grok-usage'
 import { getQuotaVisibilitySettings, setQuotaVisibilitySettings } from './quota-visibility'
 import { syncQuotaToCpa } from './cpa-sync'
 import { getNetworkSettings, setNetworkSettings } from './network-settings'
@@ -108,6 +110,8 @@ export function registerIpcHandlers() {
             ? openCodeDataRoot()
             : kind === 'antigravity'
               ? antigravityDataRoot()
+              : kind === 'grok'
+                ? grokDataRoot()
               : kind === 'ssh-readme'
                 ? app.isPackaged
                   ? path.join(process.resourcesPath, 'ssh.readme')
@@ -143,6 +147,9 @@ export function registerIpcHandlers() {
   ipcMain.handle('token:syncQuotaToCpa', async () => syncQuotaToCpa())
   ipcMain.handle('token:getCodexRateLimitResetCredits', async (_e, credentialKey?: string) =>
     getCodexRateLimitResetCredits(credentialKey),
+  )
+  ipcMain.handle('token:getGrokUsageStatus', async (_e, force?: boolean) =>
+    getGrokUsageStatus(Boolean(force)),
   )
   ipcMain.handle('token:getCodexCredentialMetas', async () => getCodexCredentialMetas())
   ipcMain.handle('token:importCodexSubscriptionFromCockpit', async () => importCodexSubscriptionFromCockpit())

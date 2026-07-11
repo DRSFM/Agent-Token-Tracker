@@ -31,6 +31,7 @@ const api: TokenAPI = {
   syncQuotaToCpa: () => ipcRenderer.invoke('token:syncQuotaToCpa'),
   getCodexRateLimitResetCredits: (credentialKey) =>
     ipcRenderer.invoke('token:getCodexRateLimitResetCredits', credentialKey),
+  getGrokUsageStatus: (force) => ipcRenderer.invoke('token:getGrokUsageStatus', force),
   getCodexCredentialMetas: () => ipcRenderer.invoke('token:getCodexCredentialMetas'),
   importCodexSubscriptionFromCockpit: () => ipcRenderer.invoke('token:importCodexSubscriptionFromCockpit'),
   setCodexCredentialMeta: (credentialKey, meta) =>

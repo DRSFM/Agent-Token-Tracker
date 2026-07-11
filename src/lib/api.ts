@@ -63,6 +63,7 @@ export const api: TokenAPI = {
   setQuotaVisibilitySettings: wrap('setQuotaVisibilitySettings'),
   syncQuotaToCpa: wrap('syncQuotaToCpa'),
   getCodexRateLimitResetCredits: wrap('getCodexRateLimitResetCredits'),
+  getGrokUsageStatus: wrap('getGrokUsageStatus'),
   getCodexCredentialMetas: wrap('getCodexCredentialMetas'),
   importCodexSubscriptionFromCockpit: wrap('importCodexSubscriptionFromCockpit'),
   setCodexCredentialMeta: wrap('setCodexCredentialMeta'),

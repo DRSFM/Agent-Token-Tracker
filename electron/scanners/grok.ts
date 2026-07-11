@@ -1,0 +1,140 @@
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import type { RequestRecord } from '../../src/types/api'
+import {
+  asNumber,
+  asRecord,
+  asString,
+  cacheKey,
+  getJsonlFileMetadata,
+  pathExists,
+  reusableCachedFile,
+  sessionTitleFromCwd,
+  shortId,
+  type CachedSourceFile,
+  type SourceScanResult,
+} from './shared'
+
+export function grokDataRoot() {
+  const configured = process.env.GROK_HOME?.trim()
+  return configured || path.join(os.homedir(), '.grok')
+}
+
+export function grokSessionsRoot(root = grokDataRoot()) {
+  return path.join(root, 'sessions')
+}
+
+export async function scanGrok(
+  cache = new Map<string, CachedSourceFile>(),
+  root = grokDataRoot(),
+): Promise<SourceScanResult> {
+  const rootExists = await pathExists(root)
+  const files = await listSignalsFiles(grokSessionsRoot(root))
+  const records: RequestRecord[] = []
+  const cacheEntries: CachedSourceFile[] = []
+  let parsedFiles = 0
+  let reusedFiles = 0
+  let lastError: string | undefined
+
+  await Promise.all(files.map(async (filePath) => {
+    const metadata = await getJsonlFileMetadata(filePath)
+    if (!metadata) return
+    const cached = reusableCachedFile('grok', metadata, cache)
+    if (cached) {
+      records.push(...cached.records)
+      cacheEntries.push(cached)
+      reusedFiles += 1
+      return
+    }
+
+    const fileRecords: RequestRecord[] = []
+    try {
+      const payload = asRecord(JSON.parse(await fs.readFile(filePath, 'utf8')))
+      if (!payload) throw new Error('signals.json 根节点不是对象')
+      const totalTokens = Math.max(0,
+        asNumber(payload.totalTokensBeforeCompaction) + asNumber(payload.contextTokensUsed),
+      )
+      const sessionDir = path.dirname(filePath)
+      const sessionId = path.basename(sessionDir)
+      const encodedProject = path.basename(path.dirname(sessionDir))
+      const projectPath = decodeProjectPath(encodedProject)
+      const model = asString(payload.primaryModelId)
+        || (Array.isArray(payload.modelsUsed) ? payload.modelsUsed.map(asString).find(Boolean) : undefined)
+        || 'grok-unknown'
+
+      if (totalTokens > 0) {
+        fileRecords.push({
+          id: `grok:${filePath}:1`,
+          timestamp: new Date(metadata.mtimeMs).toISOString(),
+          source: 'grok',
+          sessionId,
+          sessionTitle: sessionTitleFromCwd(projectPath, shortId(sessionId)),
+          model,
+          inputTokens: totalTokens,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          cacheTokens: 0,
+          rawTotalTokens: totalTokens,
+          weightedTotalTokens: totalTokens,
+          totalTokens,
+        })
+      }
+      parsedFiles += 1
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
+
+    records.push(...fileRecords)
+    cacheEntries.push({
+      source: 'grok',
+      filePath: metadata.filePath,
+      size: metadata.size,
+      mtimeMs: metadata.mtimeMs,
+      records: fileRecords,
+    })
+  }))
+
+  cacheEntries.sort((a, b) => cacheKey(a.source, a.filePath).localeCompare(cacheKey(b.source, b.filePath)))
+  return {
+    source: 'grok',
+    label: 'Grok CLI',
+    rootPath: root,
+    records,
+    scannedFiles: files.length,
+    parsedFiles,
+    reusedFiles,
+    rootExists,
+    cacheEntries,
+    lastError,
+  }
+}
+
+async function listSignalsFiles(root: string) {
+  if (!(await pathExists(root))) return []
+  const result: string[] = []
+  const visit = async (directory: string): Promise<void> => {
+    let entries
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true })
+    } catch {
+      return
+    }
+    await Promise.all(entries.map(async (entry) => {
+      const child = path.join(directory, entry.name)
+      if (entry.isDirectory()) await visit(child)
+      else if (entry.isFile() && entry.name === 'signals.json') result.push(child)
+    }))
+  }
+  await visit(root)
+  return result.sort()
+}
+
+function decodeProjectPath(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}

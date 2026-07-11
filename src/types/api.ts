@@ -15,7 +15,7 @@
 // ============================================================
 
 /** 已知的 agent 工具来源 */
-export type AgentSource = 'claude-code' | 'codex' | 'opencode' | 'antigravity' | 'unknown'
+export type AgentSource = 'claude-code' | 'codex' | 'opencode' | 'antigravity' | 'grok' | 'unknown'
 
 /** 单条请求记录 (一次模型调用) */
 export interface RequestRecord {
@@ -265,6 +265,21 @@ export interface CodexRateLimitResetCreditsResult {
   queriedAt: string
 }
 
+export interface GrokUsageStatus {
+  rootPath: string
+  authFound: boolean
+  email?: string
+  plan?: string
+  monthlyUsedPercent?: number
+  monthlyRemainingPercent?: number
+  resetsAt?: string
+  sessionCount: number
+  totalTokens: number
+  lastSessionAt?: string
+  updatedAt: string
+  error?: string
+}
+
 export type ReplayEventRole = 'user' | 'assistant' | 'system' | 'tool' | 'event'
 
 export type ReplayEventType =
@@ -401,6 +416,9 @@ export interface TokenAPI {
 
   /** 查询 Codex rate-limit reset credits。token 仅在主进程使用，不返回前端。 */
   getCodexRateLimitResetCredits(credentialKey?: string): Promise<CodexRateLimitResetCreditsResult>
+
+  /** 查询 Grok CLI 本地会话统计与月度额度。 */
+  getGrokUsageStatus(force?: boolean): Promise<GrokUsageStatus>
 
   /** 获取 Codex 凭证标签与备注。 */
   getCodexCredentialMetas(): Promise<CodexCredentialMetaMap>

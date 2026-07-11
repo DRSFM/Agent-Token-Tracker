@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Database, Activity, TrendingUp, Users } from 'lucide-react'
+import { Database, Activity, DollarSign, TrendingUp, Users } from 'lucide-react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 import { StatCard } from '@/components/overview/StatCard'
@@ -13,6 +13,9 @@ import { api, isMock } from '@/lib/api'
 import { useAsync } from '@/hooks/useTokenData'
 import type { DateRange, RankBy } from '@/types/api'
 import { ChevronDown } from 'lucide-react'
+import { useAllRequests } from '@/hooks/useAllRequests'
+import { estimateRecordsValue } from '@/lib/pricing'
+import { formatUsd, isToday } from '@/lib/format'
 
 export default function OverviewPage() {
   const navigate = useNavigate()
@@ -32,6 +35,11 @@ export default function OverviewPage() {
   const ranking = useAsync(() => api.getSessionRanking(range30, rankBy, 5), [rankBy])
   const heatmap = useAsync(() => api.getHourlyHeatmap(range30), [])
   const recent = useAsync(() => api.getRecentRequests(5), [])
+  const allRequests = useAllRequests()
+  const todayValue = useMemo(() => {
+    const estimated = estimateRecordsValue((allRequests.data ?? []).filter((record) => isToday(record.timestamp)))
+    return estimated
+  }, [allRequests.data])
 
   return (
     <div className="space-y-5 pt-2">
@@ -50,7 +58,7 @@ export default function OverviewPage() {
       </div>
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
         {stats.data && (
           <>
             <StatCard
@@ -84,6 +92,17 @@ export default function OverviewPage() {
               deltaPct={stats.data.activeSessionDeltaPct}
               icon={Users}
               iconClassName="bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300"
+            />
+            <StatCard
+              label="今日估算计费"
+              value={todayValue.totalUsd}
+              valueFormatter={formatUsd}
+              icon={DollarSign}
+              iconClassName="bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300"
+              details={[
+                { label: '缓存', value: formatUsd(todayValue.cachedUsd) },
+                { label: '非缓存', value: formatUsd(todayValue.nonCachedUsd) },
+              ]}
             />
           </>
         )}

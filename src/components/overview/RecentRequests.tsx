@@ -12,6 +12,7 @@ const sourceIcon: Record<string, LucideIcon> = {
   codex: Code2,
   opencode: TerminalSquare,
   antigravity: Orbit,
+  grok: Sparkles,
   unknown: Bot,
 }
 
@@ -20,6 +21,7 @@ const sourceColor: Record<string, string> = {
   codex: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300',
   opencode: 'bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-300',
   antigravity: 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300',
+  grok: 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900',
   unknown: 'bg-slate-100 text-slate-500 dark:bg-slate-700/60 dark:text-slate-300',
 }
 

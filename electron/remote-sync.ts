@@ -146,13 +146,20 @@ export async function testRemoteConnection() {
     return { ok: false, message: '请先启用并填写 Host。' }
   }
 
-  const result = await runProcess('ssh', sshArgs(settings, `sh -lc ${shellQuote('printf ok')}`))
-  if (result.code === 0 && result.stdout.trim() === 'ok') {
-    return { ok: true, message: '连接成功。' }
-  }
-  return {
-    ok: false,
-    message: (result.stderr || result.stdout || `ssh exited ${result.code}`).trim(),
+  try {
+    const result = await runProcess('ssh', sshArgs(settings, `sh -lc ${shellQuote('printf ok')}`))
+    if (result.code === 0 && result.stdout.trim() === 'ok') {
+      return { ok: true, message: '连接成功。' }
+    }
+    return {
+      ok: false,
+      message: (result.stderr || result.stdout || `ssh exited ${result.code}`).trim(),
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      message: `无法启动系统 ssh：${error instanceof Error ? error.message : String(error)}`,
+    }
   }
 }
 

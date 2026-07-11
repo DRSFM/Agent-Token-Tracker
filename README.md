@@ -1,6 +1,6 @@
 # Agent Token Tracker
 
-本地 Agent Token 计数器 — 估算 Claude Code、Codex CLI 等本地命令行 AI 工具的 token 消耗。
+本地 Agent Token 计数器 — 估算 Claude Code、Codex CLI、OpenCode、Antigravity、Grok 等本地 AI 工具的 token 消耗。
 
 订阅账号登录方式没有官方使用面板，本工具读取这些工具落在本地的会话日志做粗略统计（不追求 API 级精确）。所有数据都在本机处理，不会上传到任何远端服务。
 
@@ -10,8 +10,8 @@
 - **会话**：按 sessionId 聚合，支持搜索、按 token / 请求数 / 最近活跃排序
 - **回放**：按会话读取 JSONL 历史，以聊天记录方式展示用户输入与最终助手回复
 - **模型**：各模型用量分布、走势 sparkline
-- **趋势**：按日 token 变化，可按数据来源（Claude Code / Codex）拆分查看
-- **Codex 余量**：查看 Codex 账号的 5 小时与 7 天剩余额度，支持自己的账号 / 其余来源分组、隐藏账号与手动刷新
+- **趋势**：按日 token 变化，可按 Claude Code / Codex / OpenCode / Antigravity / Grok 拆分查看
+- **余量**：查看 Codex 账号的 5 小时 / 7 天额度和 Grok 月度额度；Grok 同时展示本地会话数、token 与最近活跃时间
 - **Codex 账号管理**：支持账号标签与备注、CLI 启动、桌面端切换启动、导出凭证 JSON、删除本地凭证
 - **Codex 账号导入**：支持 OpenAI 官方 OAuth 授权、粘贴 `auth.json` / 账号 JSON / `refresh_token`、导入 API Key、从本机已登录 Codex 或本地 JSON 文件导入
 - **设置**：浅色 / 深色 / 跟随系统主题，自定义背景图与不透明度
@@ -23,6 +23,9 @@
 | --- | --- |
 | Claude Code | `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl` |
 | Codex CLI | `~/.codex/sessions/**/*.jsonl` |
+| OpenCode | `~/.local/share/opencode/opencode.db`（也会识别平台数据目录） |
+| Antigravity | Antigravity / Google IDE 的 `state.vscdb` |
+| Grok | `~/.grok/sessions/**/signals.json` |
 
 ## 安装
 
@@ -49,7 +52,7 @@ agent-token-tracker
 
 ## 使用
 
-启动后会自动扫描 Claude Code 和 Codex CLI 的本地日志目录，无需配置。如果对应工具尚未在本机产生日志，对应来源会显示为空。
+启动后会自动扫描各工具的本地日志目录，无需配置。如果对应工具尚未在本机产生日志，对应来源会显示为空。OpenCode 与 Antigravity 的 SQLite 数据库由应用内置的 SQLite 运行库只读解析，不要求另一台电脑额外安装 `sqlite3` 命令。
 
 热力图按 `(weekday, hour)` 统计活跃度；最近请求列表实时反映最新写入的会话条目。
 
@@ -61,6 +64,15 @@ agent-token-tracker
 
 Team、Business、多账号等凭证会自动使用账号 ID 查询额度；过期的 OAuth token 会在有 `refresh_token` 时自动刷新。
 
+### Grok 统计
+
+Grok 本地用量从 `~/.grok/sessions/**/signals.json` 汇总；月度额度读取 `~/.grok/auth.json` 后向 Grok 服务查询。若网络或接口暂时不可用，本地会话与 token 统计仍可正常显示，并在卡片中标明在线额度错误。设置中的“余量查询代理”同时适用于 Codex 与 Grok。
+
+### 可选外部集成
+
+- CPA 同步需要用户自行配置并运行 CPA 服务，应用只调用已配置的本地同步接口。
+- 远程数据源需要操作系统提供 `ssh` 与 `tar`，缺少时设置页会明确提示；不影响全部本地统计功能。
+
 ### 历史回放
 
 会话页可在详情中打开「回放」预览，也可以进入左侧导航的「回放」页进行大屏阅读。回放模式默认只展示用户输入和同一轮最终助手回复；工具调用、阶段性过程和完整 JSONL 仍保留在「原始事件」里用于排查。
@@ -69,8 +81,9 @@ Team、Business、多账号等凭证会自动使用账号 ID 查询额度；过�
 
 ## 隐私
 
-- 所有解析与聚合都在本地完成
-- 不发送任何请求到外部服务（除桌面版的应用更新检查）
+- 日志解析与聚合都在本地完成，凭证不会传给渲染页面
+- Codex / Grok 余量查询、OAuth 登录和应用更新会分别连接 OpenAI、xAI 或配置的更新服务
+- CPA 同步与远程 SSH 仅在用户配置并主动使用时连接对应服务
 - 缓存索引存放于系统的 `userData` 目录下 `cache.json`
 
 ## 从源码构建

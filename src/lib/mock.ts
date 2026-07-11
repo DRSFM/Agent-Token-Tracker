@@ -230,6 +230,17 @@ const dataSourceStatus: DataSourceStatus = {
       reusedFiles: 0,
       requestCount: 1,
     },
+    {
+      source: 'grok',
+      label: 'Grok CLI',
+      rootPath: '~/.grok',
+      rootExists: true,
+      healthy: true,
+      scannedFiles: 3,
+      parsedFiles: 3,
+      reusedFiles: 0,
+      requestCount: 3,
+    },
   ],
 }
 
@@ -420,6 +431,21 @@ export const mockAPI: TokenAPI = {
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         },
       ],
+    }
+  },
+  async getGrokUsageStatus() {
+    return {
+      rootPath: '~/.grok',
+      authFound: true,
+      email: 'grok@example.com',
+      plan: 'SuperGrok',
+      monthlyUsedPercent: 12.5,
+      monthlyRemainingPercent: 87.5,
+      resetsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      sessionCount: 3,
+      totalTokens: 78_715,
+      lastSessionAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      updatedAt: new Date().toISOString(),
     }
   },
   async getCodexCredentialMetas() {

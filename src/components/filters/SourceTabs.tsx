@@ -10,6 +10,7 @@ const TABS: { value: SourceFilter; label: string; icon: typeof Sparkles }[] = [
   { value: 'codex', label: 'Codex', icon: Code2 },
   { value: 'opencode', label: 'opencode', icon: TerminalSquare },
   { value: 'antigravity', label: 'Antigravity', icon: Orbit },
+  { value: 'grok', label: 'Grok', icon: Sparkles },
 ]
 
 export function SourceTabs({

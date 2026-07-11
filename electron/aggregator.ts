@@ -16,6 +16,7 @@ import { claudeCodeRoot, scanClaudeCode } from './scanners/claude'
 import { codexSessionsRoot, scanCodex } from './scanners/codex'
 import { openCodeDataRoot, scanOpenCode } from './scanners/opencode'
 import { antigravityDataRoot, scanAntigravity } from './scanners/antigravity'
+import { grokDataRoot, scanGrok } from './scanners/grok'
 import { cacheKey, type CachedSourceFile, type SourceScanResult } from './scanners/shared'
 import {
   getRemoteSourceSettings,
@@ -209,6 +210,7 @@ export class TokenDataStore {
       scanCodex(cache),
       scanOpenCode(cache),
       scanAntigravity(cache),
+      scanGrok(cache),
     ]
 
     if (remoteSettings.enabled && remoteSettings.host) {
@@ -256,7 +258,13 @@ export class TokenDataStore {
   startWatching(onDataChanged: () => void) {
     if (this.watcher) return
 
-    this.watcher = chokidar.watch([claudeCodeRoot(), codexSessionsRoot(), openCodeDataRoot(), antigravityDataRoot()], {
+    this.watcher = chokidar.watch([
+      claudeCodeRoot(),
+      codexSessionsRoot(),
+      openCodeDataRoot(),
+      antigravityDataRoot(),
+      grokDataRoot(),
+    ], {
       ignoreInitial: true,
       awaitWriteFinish: {
         stabilityThreshold: 750,
@@ -266,7 +274,12 @@ export class TokenDataStore {
 
     const schedule = (filePath: string) => {
       const basename = path.basename(filePath)
-      if (!filePath.endsWith('.jsonl') && !basename.startsWith('opencode.db') && !basename.endsWith('.db')) return
+      if (
+        !filePath.endsWith('.jsonl')
+        && !basename.startsWith('opencode.db')
+        && !basename.endsWith('.db')
+        && basename !== 'signals.json'
+      ) return
       if (this.watchTimer) clearTimeout(this.watchTimer)
       this.watchTimer = setTimeout(() => {
         void this.rescan().then(onDataChanged).catch(() => {})
@@ -474,10 +487,11 @@ function sourceStatusFromScanResult(result: SourceScanResult): DataSourceStatus[
     label: result.label,
     rootPath: result.rootPath,
     rootExists: result.rootExists,
-    healthy: result.rootExists,
+    healthy: result.rootExists && !result.lastError,
     scannedFiles: result.scannedFiles,
     parsedFiles: result.parsedFiles,
     reusedFiles: result.reusedFiles,
     requestCount: result.records.length,
+    lastError: result.lastError,
   }
 }
