@@ -254,7 +254,7 @@ test('scanners reuse unchanged file cache entries', async () => {
 test('scanGrok summarizes local signals without requiring the Grok executable', async () => {
   const root = await tempRoot('agent-token-grok')
   try {
-    const project = encodeURIComponent('F:\\workspace\\grok-demo')
+    const project = encodeURIComponent(path.join('workspace', 'grok-demo'))
     const filePath = path.join(root, 'sessions', project, 'grok-session-1', 'signals.json')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, JSON.stringify({

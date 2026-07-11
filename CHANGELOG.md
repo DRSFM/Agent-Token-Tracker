@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.2.15] - 2026-07-11
+
+### Fixed
+- 修复 Grok 扫描测试使用 Windows 专属路径，导致 macOS Release job 失败的问题
+- npm Release job 固定使用 Node 22 与 npm 11.6.2，确保 SQLite 原生安装脚本在 Linux 构建环境正常执行
+
 ## [1.2.14] - 2026-07-11
 
 ### Added
