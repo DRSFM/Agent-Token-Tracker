@@ -47,6 +47,62 @@ export interface EstimatedValueSummary {
 
 const OPENAI_API_RATES: { test: RegExp; rate: DynamicApiTokenRate }[] = [
   {
+    test: /^gpt-5\.6-sol\b/i,
+    rate: {
+      inputUsdPerMillion: 5,
+      cachedInputUsdPerMillion: 0.5,
+      cacheWriteUsdPerMillion: 6.25,
+      outputUsdPerMillion: 30,
+      thresholdTokens: 272_000,
+      highContextRate: {
+        inputUsdPerMillion: 10,
+        cachedInputUsdPerMillion: 1,
+        cacheWriteUsdPerMillion: 12.5,
+        outputUsdPerMillion: 45,
+      },
+    },
+  },
+  {
+    test: /^gpt-5\.6-terra\b/i,
+    rate: {
+      inputUsdPerMillion: 2.5,
+      cachedInputUsdPerMillion: 0.25,
+      cacheWriteUsdPerMillion: 3.125,
+      outputUsdPerMillion: 15,
+      thresholdTokens: 272_000,
+      highContextRate: {
+        inputUsdPerMillion: 5,
+        cachedInputUsdPerMillion: 0.5,
+        cacheWriteUsdPerMillion: 6.25,
+        outputUsdPerMillion: 22.5,
+      },
+    },
+  },
+  {
+    test: /^gpt-5\.6-luna\b/i,
+    rate: {
+      inputUsdPerMillion: 1,
+      cachedInputUsdPerMillion: 0.1,
+      cacheWriteUsdPerMillion: 1.25,
+      outputUsdPerMillion: 6,
+      thresholdTokens: 272_000,
+      highContextRate: {
+        inputUsdPerMillion: 2,
+        cachedInputUsdPerMillion: 0.2,
+        cacheWriteUsdPerMillion: 2.5,
+        outputUsdPerMillion: 9,
+      },
+    },
+  },
+  {
+    test: /^grok-4\.5\b/i,
+    rate: { inputUsdPerMillion: 2, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 6 },
+  },
+  {
+    test: /^(?:grok-build(?:-0\.1)?|grok-code-fast(?:-1)?)\b/i,
+    rate: { inputUsdPerMillion: 1, cachedInputUsdPerMillion: 0.2, outputUsdPerMillion: 2 },
+  },
+  {
     test: /^gpt-5\.5\b/i,
     rate: { inputUsdPerMillion: 5, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 30 },
   },
@@ -140,11 +196,16 @@ function apiRateForRecord(record: RequestRecord): ApiTokenRate | null {
   const rate = apiRateForModel(record.model)
   if (!rate) return null
   const dynamicRate = rate as DynamicApiTokenRate
-  const totalTokens = Math.max(record.rawTotalTokens ?? record.totalTokens, 0)
+  const hasSeparateCacheCounters =
+    (record.source === 'claude-code' || record.source === 'opencode' || record.source === 'antigravity') &&
+    (record.cacheReadTokens !== undefined || record.cacheCreationTokens !== undefined)
+  const inputContextTokens = hasSeparateCacheCounters
+    ? Math.max(record.inputTokens, 0) + Math.max(record.cacheReadTokens ?? 0, 0) + Math.max(record.cacheCreationTokens ?? 0, 0)
+    : Math.max(record.inputTokens, 0)
   if (
     dynamicRate.thresholdTokens !== undefined &&
     dynamicRate.highContextRate &&
-    totalTokens > dynamicRate.thresholdTokens
+    inputContextTokens > dynamicRate.thresholdTokens
   ) {
     return dynamicRate.highContextRate
   }

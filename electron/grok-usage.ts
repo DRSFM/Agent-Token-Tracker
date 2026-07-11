@@ -8,6 +8,7 @@ import { getNetworkSettings } from './network-settings'
 import { grokDataRoot, scanGrok } from './scanners/grok'
 
 const GROK_BILLING_URL = 'https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig'
+const GROK_BILLING_JSON_URL = 'https://cli-chat-proxy.grok.com/v1/billing'
 const CACHE_MS = 60_000
 const OIDC_SCOPE_PREFIX = 'https://auth.x.ai::'
 const LEGACY_SCOPE = 'https://accounts.x.ai/sign-in'
@@ -19,9 +20,14 @@ export interface GrokAuthSelection {
 }
 
 export interface GrokBillingUsage {
-  monthlyUsedPercent: number
-  monthlyRemainingPercent: number
-  resetsAt?: string
+  weeklyUsedPercent?: number
+  weeklyRemainingPercent?: number
+  weeklyResetsAt?: string
+  billingLimitUsd?: number
+  billingUsedUsd?: number
+  billingRemainingUsd?: number
+  billingPeriodStart?: string
+  billingPeriodEnd?: string
 }
 
 let cached: GrokUsageStatus | null = null
@@ -61,7 +67,7 @@ export function parseGrokBillingResponse(data: Buffer, now = new Date()): GrokBi
     .sort((a, b) => a.path.length - b.path.length || a.order - b.order)
   const preferred = candidates.filter((field) => samePath(field.path, [1, 1]))
   const used = (preferred[0] || candidates[0])?.value
-  if (used === undefined) throw new Error('无法解析 Grok 月度额度')
+  if (used === undefined) throw new Error('无法解析 Grok 每周额度')
 
   const futureResets = scan.varints
     .filter((field) => field.value >= 1_700_000_000 && field.value <= 2_100_000_000)
@@ -72,10 +78,41 @@ export function parseGrokBillingResponse(data: Buffer, now = new Date()): GrokBi
     .sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date
 
   return {
-    monthlyUsedPercent: used,
-    monthlyRemainingPercent: Math.max(0, 100 - used),
-    resetsAt: reset?.toISOString(),
+    weeklyUsedPercent: used,
+    weeklyRemainingPercent: Math.max(0, 100 - used),
+    weeklyResetsAt: reset?.toISOString(),
   }
+}
+
+export function parseGrokBillingJson(value: unknown): GrokBillingUsage {
+  const root = asRecord(value)
+  const body = asRecord(root?.body) || root
+  const config = asRecord(body?.config)
+  if (!config) throw new Error('Grok billing 响应缺少 config')
+  const monthlyLimitCents = moneyValue(config.monthlyLimit)
+  const monthlyUsedCents = moneyValue(config.used)
+  if (monthlyLimitCents === null || monthlyLimitCents <= 0 || monthlyUsedCents === null) {
+    throw new Error('Grok billing 响应缺少月度金额')
+  }
+  const billingLimitUsd = monthlyLimitCents / 100
+  const billingUsedUsd = monthlyUsedCents / 100
+  const billingRemainingUsd = Math.max(0, billingLimitUsd - billingUsedUsd)
+  const billingPeriodStart = validIsoString(config.billingPeriodStart)
+  const billingPeriodEnd = validIsoString(config.billingPeriodEnd)
+  return {
+    billingLimitUsd,
+    billingUsedUsd,
+    billingRemainingUsd,
+    billingPeriodStart,
+    billingPeriodEnd,
+  }
+}
+
+export function mergeGrokUsageResults(
+  weekly: GrokBillingUsage,
+  billing: GrokBillingUsage,
+): GrokBillingUsage {
+  return { ...billing, ...weekly }
 }
 
 export async function getGrokUsageStatus(force = false): Promise<GrokUsageStatus> {
@@ -101,7 +138,7 @@ async function refreshGrokUsageStatus(): Promise<GrokUsageStatus> {
   const base: GrokUsageStatus = {
     rootPath,
     authFound: false,
-    sessionCount: scan.records.length,
+    sessionCount: new Set(scan.records.map((record) => record.sessionId)).size,
     totalTokens,
     lastSessionAt,
     updatedAt: new Date().toISOString(),
@@ -140,10 +177,98 @@ async function refreshGrokUsageStatus(): Promise<GrokUsageStatus> {
 
 async function fetchGrokBilling(accessToken: string): Promise<GrokBillingUsage> {
   const { quotaProxyUrl } = await getNetworkSettings()
-  const body = quotaProxyUrl
+  const weeklyBody = quotaProxyUrl
     ? await postGrokViaHttpProxy(accessToken, quotaProxyUrl)
     : await postGrokDirect(accessToken)
-  return parseGrokBillingResponse(body)
+  const weekly = parseGrokBillingResponse(weeklyBody)
+
+  try {
+    const body = quotaProxyUrl
+      ? await getGrokBillingJsonViaHttpProxy(accessToken, quotaProxyUrl)
+      : await getGrokBillingJsonDirect(accessToken)
+    return mergeGrokUsageResults(weekly, parseGrokBillingJson(JSON.parse(body.toString('utf8'))))
+  } catch {
+    // The dollar billing cycle is supplemental. Weekly SuperGrok quota remains usable.
+    return weekly
+  }
+}
+
+function billingJsonHeaders(accessToken: string) {
+  return {
+    Accept: 'application/json',
+    'User-Agent': 'Agent Token Tracker',
+    Authorization: `Bearer ${accessToken}`,
+  }
+}
+
+function getGrokBillingJsonDirect(accessToken: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const request = https.request(GROK_BILLING_JSON_URL, {
+      method: 'GET',
+      headers: billingJsonHeaders(accessToken),
+    }, (response) => collectHttpResponse(response, resolve, reject))
+    request.setTimeout(20_000, () => request.destroy(new Error('Grok billing 查询超时')))
+    request.on('error', reject)
+    request.end()
+  })
+}
+
+function getGrokBillingJsonViaHttpProxy(accessToken: string, proxyUrl: string): Promise<Buffer> {
+  const target = new URL(GROK_BILLING_JSON_URL)
+  const proxy = new URL(proxyUrl)
+  const targetPort = Number(target.port || 443)
+  const proxyPort = Number(proxy.port || 80)
+  const proxyAuth = proxy.username || proxy.password
+    ? Buffer.from(`${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`).toString('base64')
+    : ''
+  return new Promise((resolve, reject) => {
+    const connectRequest = http.request({
+      host: proxy.hostname,
+      port: proxyPort,
+      method: 'CONNECT',
+      path: `${target.hostname}:${targetPort}`,
+      headers: proxyAuth ? { 'Proxy-Authorization': `Basic ${proxyAuth}` } : undefined,
+    })
+    connectRequest.setTimeout(20_000, () => connectRequest.destroy(new Error('Grok 代理连接超时')))
+    connectRequest.on('connect', (response, socket) => {
+      if ((response.statusCode || 0) < 200 || (response.statusCode || 0) >= 300) {
+        socket.destroy()
+        reject(new Error(`Grok 代理连接 HTTP ${response.statusCode || 0}`))
+        return
+      }
+      const tlsSocket = tls.connect({ socket, servername: target.hostname })
+      tlsSocket.setTimeout(20_000, () => tlsSocket.destroy(new Error('Grok billing 查询超时')))
+      const request = https.request({
+        method: 'GET',
+        host: target.hostname,
+        path: `${target.pathname}${target.search}`,
+        servername: target.hostname,
+        headers: billingJsonHeaders(accessToken),
+        createConnection: () => tlsSocket,
+      }, (billingResponse) => collectHttpResponse(billingResponse, resolve, reject))
+      request.on('error', reject)
+      request.end()
+    })
+    connectRequest.on('error', reject)
+    connectRequest.end()
+  })
+}
+
+function collectHttpResponse(
+  response: http.IncomingMessage,
+  resolve: (value: Buffer) => void,
+  reject: (reason?: unknown) => void,
+) {
+  const chunks: Buffer[] = []
+  response.on('data', (chunk: Buffer) => chunks.push(chunk))
+  response.on('end', () => {
+    const status = response.statusCode || 0
+    if (status < 200 || status >= 300) {
+      reject(new Error(status === 401 || status === 403 ? 'Grok 登录已失效，请运行 grok login' : `Grok billing 查询 HTTP ${status}`))
+      return
+    }
+    resolve(Buffer.concat(chunks))
+  })
 }
 
 function grokHeaders(accessToken: string) {
@@ -249,6 +374,17 @@ function authEntry(value: Record<string, unknown> | null): GrokAuthSelection | u
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function moneyValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const record = asRecord(value)
+  return typeof record?.val === 'number' && Number.isFinite(record.val) ? record.val : null
+}
+
+function validIsoString(value: unknown) {
+  if (typeof value !== 'string' || !Number.isFinite(new Date(value).getTime())) return undefined
+  return new Date(value).toISOString()
 }
 
 interface ProtoScan {

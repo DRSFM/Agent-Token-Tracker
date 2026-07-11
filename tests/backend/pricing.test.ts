@@ -163,6 +163,51 @@ test('estimateRequestValue prices Antigravity Gemini 3.1 Pro high-context tier a
   assertApprox(value.totalUsd, 1.02)
 })
 
+test('estimateRequestValue prices GPT-5.6 Sol cache reads at the official API rate', () => {
+  const value = estimateRequestValue({
+    ...baseRecord,
+    model: 'gpt-5.6-sol',
+    inputTokens: 1_000_000,
+    outputTokens: 10_000,
+    cacheTokens: 800_000,
+    rawTotalTokens: 1_010_000,
+    totalTokens: 290_000,
+  })
+
+  assert.equal(value.priced, true)
+  assertApprox(value.inputUsd, 2)
+  assertApprox(value.cachedInputUsd, 0.8)
+  assertApprox(value.outputUsd, 0.45)
+  assertApprox(value.totalUsd, 3.25)
+})
+
+test('estimateRequestValue prices Grok Build and Grok 4.5 usage fields', () => {
+  const build = estimateRequestValue({
+    ...baseRecord,
+    source: 'grok',
+    model: 'grok-build',
+    inputTokens: 35_896,
+    outputTokens: 1_581,
+    cacheTokens: 25_088,
+    rawTotalTokens: 37_477,
+    totalTokens: 14_098.8,
+  })
+  const grok45 = estimateRequestValue({
+    ...baseRecord,
+    source: 'grok',
+    model: 'grok-4.5',
+    inputTokens: 21_224,
+    outputTokens: 14_940,
+    cacheTokens: 11_008,
+    rawTotalTokens: 36_164,
+    totalTokens: 26_064.8,
+  })
+
+  assertApprox(build.totalUsd, 0.0189876)
+  assertApprox(grok45.totalUsd, 0.115576)
+  assert.equal(estimateRequestValue({ ...baseRecord, source: 'grok', model: 'grok-composer-2.5-fast' }).priced, false)
+})
+
 function assertApprox(actual: number, expected: number) {
   assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} should be close to ${expected}`)
 }

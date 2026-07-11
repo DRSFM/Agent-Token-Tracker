@@ -270,9 +270,14 @@ export interface GrokUsageStatus {
   authFound: boolean
   email?: string
   plan?: string
-  monthlyUsedPercent?: number
-  monthlyRemainingPercent?: number
-  resetsAt?: string
+  weeklyUsedPercent?: number
+  weeklyRemainingPercent?: number
+  weeklyResetsAt?: string
+  billingLimitUsd?: number
+  billingUsedUsd?: number
+  billingRemainingUsd?: number
+  billingPeriodStart?: string
+  billingPeriodEnd?: string
   sessionCount: number
   totalTokens: number
   lastSessionAt?: string

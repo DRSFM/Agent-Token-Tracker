@@ -7,7 +7,7 @@ import { scanClaudeCode } from '../../electron/scanners/claude'
 import { scanCodex } from '../../electron/scanners/codex'
 import { openCodeRowsToRecords } from '../../electron/scanners/opencode'
 import { antigravityRowsToRecords } from '../../electron/scanners/antigravity'
-import { scanGrok } from '../../electron/scanners/grok'
+import { grokUnifiedLogToRecords, scanGrok } from '../../electron/scanners/grok'
 import { cacheKey } from '../../electron/scanners/shared'
 import { readClaudeReplay, readCodexReplay } from '../../electron/replay'
 
@@ -277,6 +277,98 @@ test('scanGrok summarizes local signals without requiring the Grok executable', 
     assert.equal(result.records[0].rawTotalTokens, 125)
     assert.equal(result.records[0].totalTokens, 125)
     assert.equal(result.records[0].timestamp, timestamp.toISOString())
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test('grokUnifiedLogToRecords reads exact per-request usage and follows model changes', () => {
+  const records = grokUnifiedLogToRecords([
+    JSON.stringify({
+      ts: '2026-07-07T01:24:15.351Z',
+      sid: 'catalog',
+      msg: 'model catalog: notifying clients',
+      ctx: { current_model_id: 'grok-composer-2.5-fast' },
+    }),
+    JSON.stringify({
+      ts: '2026-07-07T01:27:27.261Z',
+      sid: 'session-a',
+      msg: 'shell.turn.inference_done',
+      ctx: {
+        loop_index: 0,
+        prompt_tokens: 12_675,
+        cached_prompt_tokens: 7_555,
+        completion_tokens: 121,
+        reasoning_tokens: 100,
+      },
+    }),
+    JSON.stringify({
+      ts: '2026-07-07T01:29:48.967Z',
+      sid: 'session-b',
+      msg: 'backend_search: model switch',
+      ctx: { new_model: 'grok-build' },
+    }),
+    JSON.stringify({
+      ts: '2026-07-07T01:30:39.028Z',
+      sid: 'session-b',
+      msg: 'shell.turn.inference_done',
+      ctx: {
+        loop_index: 1,
+        prompt_tokens: 35_896,
+        cached_prompt_tokens: 25_088,
+        completion_tokens: 1_581,
+        reasoning_tokens: 1_578,
+      },
+    }),
+  ], new Map([
+    ['session-a', 'Composer session'],
+    ['session-b', 'Build session'],
+  ]))
+
+  assert.equal(records.length, 2)
+  assert.equal(records[0].model, 'grok-composer-2.5-fast')
+  assert.equal(records[0].sessionTitle, 'Composer session')
+  assert.equal(records[0].inputTokens, 12_675)
+  assert.equal(records[0].cacheTokens, 7_555)
+  assert.equal(records[0].outputTokens, 121)
+  assert.equal(records[0].rawTotalTokens, 12_796)
+  assert.equal(records[0].totalTokens, 5_996.5)
+  assert.equal(records[1].model, 'grok-build')
+  assert.equal(records[1].sessionId, 'session-b')
+  assert.equal(records[1].outputTokens, 1_581)
+})
+
+test('scanGrok prefers exact unified usage over signals aggregates', async () => {
+  const root = await tempRoot('agent-token-grok-unified')
+  try {
+    const signalsPath = path.join(root, 'sessions', 'demo', 'session-a', 'signals.json')
+    await fs.mkdir(path.dirname(signalsPath), { recursive: true })
+    await fs.writeFile(signalsPath, JSON.stringify({
+      totalTokensBeforeCompaction: 99_999,
+      primaryModelId: 'grok-build',
+    }), 'utf8')
+    await writeJsonl(path.join(root, 'logs', 'unified.jsonl'), [
+      JSON.stringify({
+        ts: '2026-07-07T01:29:48.967Z',
+        sid: 'session-a',
+        msg: 'backend_search: model switch',
+        ctx: { new_model: 'grok-build' },
+      }),
+      JSON.stringify({
+        ts: '2026-07-07T01:30:39.028Z',
+        sid: 'session-a',
+        msg: 'shell.turn.inference_done',
+        ctx: { prompt_tokens: 100, cached_prompt_tokens: 40, completion_tokens: 20 },
+      }),
+    ])
+
+    const result = await scanGrok(new Map(), root)
+
+    assert.equal(result.records.length, 1)
+    assert.equal(result.records[0].rawTotalTokens, 120)
+    assert.equal(result.records[0].totalTokens, 84)
+    assert.equal(result.parsedFiles, 1)
+    assert.equal(result.scannedFiles, 2)
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

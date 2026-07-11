@@ -31,6 +31,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
 import { api, isMock } from '@/lib/api'
 import { formatCompact, formatRelativeMinutes, formatUsd } from '@/lib/format'
+import { estimateRecordsValue } from '@/lib/pricing'
 import { quotaPrimaryLimitLabel, quotaSecondaryLimitLabel, shouldShowSecondaryLimit } from '@/lib/quota-labels'
 import { cn } from '@/lib/utils'
 import { useAllRequests } from '@/hooks/useAllRequests'
@@ -45,6 +46,7 @@ import type {
   QuotaAccountGroup,
   QuotaAccountStatus,
   QuotaStatus,
+  RequestRecord,
   SyncQuotaToCpaResult,
 } from '@/types/api'
 
@@ -711,8 +713,16 @@ function QuotaBar({ value, className }: { value: number | null; className?: stri
   )
 }
 
-function GrokUsageCard({ status }: { status: GrokUsageStatus | null }) {
-  const remaining = status?.monthlyRemainingPercent ?? null
+function GrokUsageCard({ status, records }: { status: GrokUsageStatus | null; records: RequestRecord[] }) {
+  const remaining = status?.weeklyRemainingPercent ?? null
+  const estimated = useMemo(() => estimateRecordsValue(records), [records])
+  const counters = useMemo(() => records.reduce((summary, record) => ({
+    input: summary.input + Math.max(record.inputTokens, 0),
+    cache: summary.cache + Math.max(record.cacheTokens ?? record.cacheReadTokens ?? 0, 0),
+    output: summary.output + Math.max(record.outputTokens, 0),
+  }), { input: 0, cache: 0, output: 0 }), [records])
+  const pricedCount = estimated.pricedRequests
+  const totalCount = pricedCount + estimated.unpricedRequests
   return (
     <Card className="overflow-hidden border-slate-300/70 bg-slate-950 text-slate-100 dark:border-slate-700">
       <CardBody className="relative">
@@ -742,7 +752,13 @@ function GrokUsageCard({ status }: { status: GrokUsageStatus | null }) {
               {formatCompact(status?.sessionCount ?? 0)} sessions
             </span>
             <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
+              {formatCompact(records.length)} req
+            </span>
+            <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
               {formatCompact(status?.totalTokens ?? 0)} tokens
+            </span>
+            <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
+              {pricedCount > 0 ? `等效 ${formatUsd(estimated.totalUsd)}` : `未定价 ${estimated.unpricedRequests} req`}
             </span>
             {status?.lastSessionAt && (
               <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm text-slate-300">
@@ -751,8 +767,16 @@ function GrokUsageCard({ status }: { status: GrokUsageStatus | null }) {
             )}
           </div>
 
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums text-slate-400">
+            <span>输入 {formatCompact(counters.input)}</span>
+            <span>其中缓存 {formatCompact(counters.cache)}</span>
+            <span>输出 {formatCompact(counters.output)}</span>
+            <span>价格覆盖 {pricedCount}/{totalCount}</span>
+            {estimated.unpricedRequests > 0 && <span className="text-amber-300">{estimated.unpricedRequests} 次请求无公开价格</span>}
+          </div>
+
           <div className="grid grid-cols-[auto_minmax(120px,1fr)_auto] items-center gap-3">
-            <span className="rounded-lg bg-cyan-400/15 px-3 py-2 text-sm font-semibold text-cyan-300">月度</span>
+            <span className="rounded-lg bg-cyan-400/15 px-3 py-2 text-sm font-semibold text-cyan-300">每周</span>
             <div className="h-2 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full rounded-full bg-cyan-400 transition-[width] duration-300"
@@ -761,8 +785,12 @@ function GrokUsageCard({ status }: { status: GrokUsageStatus | null }) {
             </div>
             <div className="text-right text-sm tabular-nums text-slate-300">
               <span className="font-semibold text-white">剩余 {quotaLabel(remaining)}</span>
-              {status?.resetsAt && <span className="ml-2 text-slate-400">{formatSubscriptionTime(status.resetsAt)}</span>}
+              {status?.weeklyResetsAt && <span className="ml-2 text-slate-400">{formatSubscriptionTime(status.weeklyResetsAt)}</span>}
             </div>
+          </div>
+
+          <div className="text-xs text-slate-500">
+            等效美元按公开 API 单价计算；每周进度来自 SuperGrok 在线额度，两者不是同一账单。
           </div>
 
           {status?.error && (
@@ -777,6 +805,8 @@ function GrokUsageCard({ status }: { status: GrokUsageStatus | null }) {
 }
 
 function CodexPeriodMetrics({ period }: { period: CodexUsagePeriod }) {
+  const pricedCount = period.estimated.pricedRequests
+  const totalCount = pricedCount + period.estimated.unpricedRequests
   return (
     <div className="flex flex-wrap gap-2">
       <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
@@ -786,11 +816,15 @@ function CodexPeriodMetrics({ period }: { period: CodexUsagePeriod }) {
         {formatCompact(period.totalTokens)} tokens
       </span>
       <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-200">
-        估算 {formatUsd(period.estimated.totalUsd)}
+        {pricedCount > 0
+          ? `等效 ${formatUsd(period.estimated.totalUsd)} · 覆盖 ${pricedCount}/${totalCount}`
+          : `未定价 ${period.estimated.unpricedRequests} req`}
       </span>
-      <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-300">
-        非缓存 {formatUsd(period.estimated.nonCachedUsd)}
-      </span>
+      {pricedCount > 0 && (
+        <span className="rounded-lg bg-white/[0.07] px-3 py-2 text-sm tabular-nums text-slate-300">
+          非缓存 {formatUsd(period.estimated.nonCachedUsd)}
+        </span>
+      )}
     </div>
   )
 }
@@ -1861,7 +1895,7 @@ export default function QuotaPage() {
       )}
 
       <CodexUsageCard records={allRequests.data ?? []} quota={usageReferenceQuota} />
-      <GrokUsageCard status={grokStatus} />
+      <GrokUsageCard status={grokStatus} records={(allRequests.data ?? []).filter((record) => record.source === 'grok')} />
 
       {error ? (
         <Card>

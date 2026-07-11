@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [1.2.16] - 2026-07-11
+
+### Added
+- Grok 统一日志扫描新增逐请求输入、缓存输入、输出 token 与模型关联，支持 Grok 4.5 / Grok Build 估算计费
+- 新增 GPT-5.6 Sol、Terra、Luna 的标准及长上下文 API 估算价格
+
+### Changed
+- Grok 在线进度改为每周 SuperGrok 额度；billing JSON 美元账期仅保留为独立元数据，不再冒充月度限额
+- Codex 与 Grok 卡片会显示价格覆盖率；无公开价格的请求明确标记为未定价，不再显示误导性的 `$0.00`
+
 ## [1.2.15] - 2026-07-11
 
 ### Fixed

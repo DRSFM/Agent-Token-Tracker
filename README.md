@@ -11,7 +11,7 @@
 - **回放**：按会话读取 JSONL 历史，以聊天记录方式展示用户输入与最终助手回复
 - **模型**：各模型用量分布、走势 sparkline
 - **趋势**：按日 token 变化，可按 Claude Code / Codex / OpenCode / Antigravity / Grok 拆分查看
-- **余量**：查看 Codex 账号的 5 小时 / 7 天额度和 Grok 月度额度；Grok 同时展示本地会话数、token 与最近活跃时间
+- **余量**：查看 Codex 账号的 5 小时 / 7 天额度和 Grok 每周额度；Grok 同时展示本地会话数、token、API 等效美元与最近活跃时间
 - **Codex 账号管理**：支持账号标签与备注、CLI 启动、桌面端切换启动、导出凭证 JSON、删除本地凭证
 - **Codex 账号导入**：支持 OpenAI 官方 OAuth 授权、粘贴 `auth.json` / 账号 JSON / `refresh_token`、导入 API Key、从本机已登录 Codex 或本地 JSON 文件导入
 - **设置**：浅色 / 深色 / 跟随系统主题，自定义背景图与不透明度
@@ -25,7 +25,7 @@
 | Codex CLI | `~/.codex/sessions/**/*.jsonl` |
 | OpenCode | `~/.local/share/opencode/opencode.db`（也会识别平台数据目录） |
 | Antigravity | Antigravity / Google IDE 的 `state.vscdb` |
-| Grok | `~/.grok/sessions/**/signals.json` |
+| Grok | `~/.grok/logs/unified.jsonl`（精确请求用量），旧版回退到 `~/.grok/sessions/**/signals.json` |
 
 ## 安装
 
@@ -66,7 +66,9 @@ Team、Business、多账号等凭证会自动使用账号 ID 查询额度；过�
 
 ### Grok 统计
 
-Grok 本地用量从 `~/.grok/sessions/**/signals.json` 汇总；月度额度读取 `~/.grok/auth.json` 后向 Grok 服务查询。若网络或接口暂时不可用，本地会话与 token 统计仍可正常显示，并在卡片中标明在线额度错误。设置中的“余量查询代理”同时适用于 Codex 与 Grok。
+Grok 本地用量优先从 `~/.grok/logs/unified.jsonl` 读取逐请求输入、缓存输入和输出 token，并按日志中的模型切换事件关联 Grok 4.5、Grok Build 等模型；旧版 CLI 没有统一日志时才回退到 `signals.json` 会话汇总。Grok 4.5 与 Grok Build 按公开 API 单价估算，未找到可靠公开价格的模型会明确显示为“未定价”，不会伪装成 `$0.00`。
+
+每周 SuperGrok 额度读取 `~/.grok/auth.json` 后查询 Grok 的 gRPC-Web 额度接口；billing JSON 仅作为独立的美元账期元数据，不能替代每周额度。若网络或接口暂时不可用，本地用量与等效计费仍可正常显示，并在卡片中标明在线额度错误。设置中的“余量查询代理”同时适用于 Codex 与 Grok。
 
 ### 可选外部集成
 
