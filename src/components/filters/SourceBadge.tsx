@@ -1,5 +1,5 @@
-import { Sparkles, Code2, Bot, TerminalSquare, Orbit, type LucideIcon } from 'lucide-react'
-import type { AgentSource } from '@/types/api'
+import { Sparkles, Code2, Bot, TerminalSquare, Orbit, Route, type LucideIcon } from 'lucide-react'
+import type { AgentSource, UsageChannel, UsageUpstream } from '@/types/api'
 import { SOURCE_LABEL } from '@/lib/aggregations'
 import { cn } from '@/lib/utils'
 
@@ -23,12 +23,17 @@ const COLOR: Record<AgentSource, string> = {
 
 export function SourceBadge({
   source,
+  usageChannel,
+  upstream,
   size = 'sm',
 }: {
   source: AgentSource
+  usageChannel?: UsageChannel
+  upstream?: UsageUpstream
   size?: 'xs' | 'sm'
 }) {
-  const Icon = ICON[source]
+  const isApi = usageChannel === 'api'
+  const Icon = isApi ? Route : ICON[source]
   const sizeCls =
     size === 'xs'
       ? 'text-[10px] px-1.5 py-0.5 gap-1'
@@ -37,12 +42,14 @@ export function SourceBadge({
     <span
       className={cn(
         'inline-flex items-center rounded-md font-medium whitespace-nowrap',
-        COLOR[source],
+        isApi
+          ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300'
+          : COLOR[source],
         sizeCls,
       )}
     >
       <Icon className={size === 'xs' ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
-      {SOURCE_LABEL[source]}
+      {upstream?.label ?? SOURCE_LABEL[source]}
     </span>
   )
 }

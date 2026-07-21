@@ -4,7 +4,12 @@ import type {
   DailyTrendPoint,
   HeatmapCell,
   ModelShare,
+  OverviewStats,
+  RankBy,
   RequestRecord,
+  SessionSummary,
+  UsageChannel,
+  UsageUpstream,
 } from '@/types/api'
 import { estimateRequestValue } from './pricing'
 
@@ -80,6 +85,47 @@ export const dateKey = (d: Date) =>
 export const sumTokens = (records: RequestRecord[]) =>
   records.reduce((s, r) => s + r.totalTokens, 0)
 
+const deltaPct = (current: number, previous: number) => {
+  if (previous === 0) return current === 0 ? 0 : 1
+  return (current - previous) / previous
+}
+
+type SessionIdentityFields = Pick<RequestRecord, 'source' | 'sessionId' | 'usageChannel' | 'upstream'>
+
+export const sessionIdentity = (record: SessionIdentityFields) =>
+  [record.source, record.usageChannel ?? 'account', record.upstream?.id ?? '', record.sessionId].join('\u0000')
+
+export function aggregateOverviewStats(records: RequestRecord[]): OverviewStats {
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const todayRecords = records.filter((record) => dateKey(new Date(record.timestamp)) === dateKey(today))
+  const yesterdayRecords = records.filter((record) => dateKey(new Date(record.timestamp)) === dateKey(yesterday))
+  const todayTotalTokens = sumTokens(todayRecords)
+  const yesterdayTotalTokens = sumTokens(yesterdayRecords)
+  const todayRequestCount = todayRecords.length
+  const yesterdayRequestCount = yesterdayRecords.length
+  const todayAvgPerRequest = todayRequestCount ? Math.round(todayTotalTokens / todayRequestCount) : 0
+  const yesterdayAvgPerRequest = yesterdayRequestCount
+    ? Math.round(yesterdayTotalTokens / yesterdayRequestCount)
+    : 0
+  const activeSessionCount = new Set(todayRecords.map(sessionIdentity)).size
+  const yesterdayActiveSessionCount = new Set(yesterdayRecords.map(sessionIdentity)).size
+
+  return {
+    todayTotalTokens,
+    todayRawTotalTokens: todayRecords.reduce((sum, record) => sum + rawTokenTotal(record), 0),
+    todayCacheTokens: todayRecords.reduce((sum, record) => sum + (record.cacheTokens ?? 0), 0),
+    todayRequestCount,
+    todayAvgPerRequest,
+    activeSessionCount,
+    todayTotalDeltaPct: deltaPct(todayTotalTokens, yesterdayTotalTokens),
+    todayRequestDeltaPct: deltaPct(todayRequestCount, yesterdayRequestCount),
+    todayAvgDeltaPct: deltaPct(todayAvgPerRequest, yesterdayAvgPerRequest),
+    activeSessionDeltaPct: deltaPct(activeSessionCount, yesterdayActiveSessionCount),
+  }
+}
+
 const rawTokenTotal = (record: RequestRecord) => record.rawTotalTokens ?? record.totalTokens
 export const weightedTokenTotal = (record: RequestRecord) => {
   const outputTokens = Math.max(record.outputTokens, 0)
@@ -98,6 +144,8 @@ export interface SessionAggregate {
   sessionId: string
   title: string
   source: AgentSource
+  usageChannel?: UsageChannel
+  upstream?: UsageUpstream
   totalTokens: number
   rawTotalTokens: number
   weightedTotalTokens: number
@@ -121,12 +169,15 @@ export interface SessionAggregate {
 export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] {
   const map = new Map<string, SessionAggregate>()
   for (const r of records) {
-    let agg = map.get(r.sessionId)
+    const identity = sessionIdentity(r)
+    let agg = map.get(identity)
     if (!agg) {
       agg = {
         sessionId: r.sessionId,
         title: r.sessionTitle ?? r.sessionId,
         source: r.source,
+        usageChannel: r.usageChannel,
+        upstream: r.upstream,
         totalTokens: 0,
         rawTotalTokens: 0,
         weightedTotalTokens: 0,
@@ -146,7 +197,7 @@ export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] 
         firstActiveAt: r.timestamp,
         lastActiveAt: r.timestamp,
       }
-      map.set(r.sessionId, agg)
+      map.set(identity, agg)
     }
     agg.totalTokens += r.totalTokens
     agg.rawTotalTokens += rawTokenTotal(r)
@@ -180,7 +231,7 @@ export function aggregateSessions(records: RequestRecord[]): SessionAggregate[] 
 }
 
 /** 按 model 聚合 + share */
-export function aggregateModels(records: RequestRecord[]): ModelShare[] {
+export function aggregateModels(records: RequestRecord[], by: RankBy = 'tokens'): ModelShare[] {
   const map = new Map<string, { rawTotalTokens: number; weightedTotalTokens: number; requestCount: number }>()
   for (const r of records) {
     const cur = map.get(r.model) ?? { rawTotalTokens: 0, weightedTotalTokens: 0, requestCount: 0 }
@@ -189,7 +240,10 @@ export function aggregateModels(records: RequestRecord[]): ModelShare[] {
     cur.requestCount += 1
     map.set(r.model, cur)
   }
-  const total = [...map.values()].reduce((s, v) => s + v.rawTotalTokens, 0)
+  const total = [...map.values()].reduce(
+    (sum, value) => sum + (by === 'tokens' ? value.rawTotalTokens : value.requestCount),
+    0,
+  )
   return [...map.entries()]
     .map(([model, v]) => ({
       model,
@@ -197,9 +251,29 @@ export function aggregateModels(records: RequestRecord[]): ModelShare[] {
       weightedTotalTokens: v.weightedTotalTokens,
       totalTokens: v.rawTotalTokens,
       requestCount: v.requestCount,
-      share: total ? v.rawTotalTokens / total : 0,
+      share: total ? (by === 'tokens' ? v.rawTotalTokens : v.requestCount) / total : 0,
     }))
-    .sort((a, b) => b.totalTokens - a.totalTokens)
+    .sort((a, b) => by === 'tokens' ? b.totalTokens - a.totalTokens : b.requestCount - a.requestCount)
+}
+
+export function aggregateSessionRanking(
+  records: RequestRecord[],
+  by: RankBy,
+  limit: number,
+): SessionSummary[] {
+  return aggregateSessions(records)
+    .map((session) => ({
+      sessionId: session.sessionId,
+      title: session.title,
+      source: session.source,
+      usageChannel: session.usageChannel,
+      upstream: session.upstream,
+      totalTokens: session.totalTokens,
+      requestCount: session.requestCount,
+      lastActiveAt: session.lastActiveAt,
+    }))
+    .sort((a, b) => by === 'tokens' ? b.totalTokens - a.totalTokens : b.requestCount - a.requestCount)
+    .slice(0, Math.max(0, limit))
 }
 
 /** 按日聚合（指定窗口内每日 token） */

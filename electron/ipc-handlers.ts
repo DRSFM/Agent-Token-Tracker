@@ -3,12 +3,14 @@ import path from 'node:path'
 import type {
   AgentSource,
   DateRange,
+  OpenLocalPathTarget,
   RankBy,
   ReplaySessionOptions,
 } from '../src/types/api'
 import { tokenDataStore } from './aggregator'
 import { claudeCodeRoot } from './scanners/claude'
 import { codexSessionsRoot } from './scanners/codex'
+import { codexApiRoot } from './scanners/codex-profiles'
 import { openCodeDataRoot } from './scanners/opencode'
 import { antigravityDataRoot } from './scanners/antigravity'
 import { grokDataRoot } from './scanners/grok'
@@ -100,7 +102,25 @@ export function registerIpcHandlers() {
     return { cleared: result.cleared && state.scannedFiles >= 0 }
   })
 
-  ipcMain.handle('token:openLocalPath', async (_e, kind: AgentSource | 'cache' | 'ssh-readme' | 'remote-cache') => {
+  ipcMain.handle('token:openLocalPath', async (_e, kind: OpenLocalPathTarget) => {
+    if (typeof kind === 'object') {
+      const targetPath = path.resolve(kind.rootPath)
+      const allowedRoots = [
+        claudeCodeRoot(),
+        codexSessionsRoot(),
+        codexApiRoot(),
+        openCodeDataRoot(),
+        antigravityDataRoot(),
+        grokDataRoot(),
+        remoteCacheRoot(),
+      ]
+      if (!allowedRoots.some((root) => isPathAtOrInside(root, targetPath))) {
+        return { ok: false, path: targetPath, error: 'Unsupported data source path.' }
+      }
+      const error = await shell.openPath(targetPath)
+      return { ok: !error, path: targetPath, error: error || undefined }
+    }
+
     const targetPath =
       kind === 'claude-code'
         ? claudeCodeRoot()
@@ -193,7 +213,7 @@ export function registerIpcHandlers() {
     source?: AgentSource,
     options?: ReplaySessionOptions,
   ) => {
-    const files = await tokenDataStore.getReplayFilesForSession(sessionId, source)
+    const files = await tokenDataStore.getReplayFilesForSession(sessionId, source, options)
     return getReplaySession(sessionId, source, files, options)
   })
 
@@ -211,4 +231,9 @@ export function registerIpcHandlers() {
   app.on('before-quit', () => {
     void tokenDataStore.stopWatching()
   })
+}
+
+function isPathAtOrInside(root: string, targetPath: string) {
+  const relative = path.relative(path.resolve(root), targetPath)
+  return !relative || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }

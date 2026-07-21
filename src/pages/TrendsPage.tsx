@@ -5,7 +5,7 @@ import { DailyTrendChart } from '@/components/overview/DailyTrendChart'
 import { Heatmap } from '@/components/overview/Heatmap'
 import { StackedSourceChart } from '@/components/trends/StackedSourceChart'
 import { PeriodComparison } from '@/components/trends/PeriodComparison'
-import { useAllRequests } from '@/hooks/useAllRequests'
+import { useScopedRequests } from '@/hooks/useAllRequests'
 import {
   aggregateDaily,
   aggregateDailyBySource,
@@ -26,7 +26,7 @@ const RANGE_OPTIONS = [
 
 export default function TrendsPage() {
   const [rangeValue, setRangeValue] = useState<RangeSelectValue>(30)
-  const { data, loading, error, refresh } = useAllRequests()
+  const { data, loading, error, refresh } = useScopedRequests()
   const range = useMemo(
     () => (rangeValue === 'all' ? allTimeRange(data ?? []) : lastNDays(rangeValue)),
     [data, rangeValue],

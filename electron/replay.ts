@@ -8,7 +8,7 @@ import type {
   ReplayEventType,
 } from '../src/types/api'
 import { claudeCodeRoot } from './scanners/claude'
-import { codexSessionsRoot } from './scanners/codex'
+import { discoverCodexScanTargets } from './scanners/codex'
 import {
   asNumber,
   asRecord,
@@ -50,7 +50,11 @@ export async function getReplaySession(
   }
 
   if (source === 'codex' || source === 'unknown') {
-    events.push(...await readCodexReplay(sessionId, codexSessionsRoot(), candidateFiles, options))
+    const codexTargets = await discoverCodexScanTargets()
+    const localEvents = await Promise.all(
+      codexTargets.map((target) => readCodexReplay(sessionId, target.rootPath, candidateFiles, options)),
+    )
+    events.push(...localEvents.flat())
     if (remoteSettings.enabled && remoteSettings.host) {
       events.push(...await readCodexReplay(sessionId, remoteCodexCacheRoot(), candidateFiles, options))
     }

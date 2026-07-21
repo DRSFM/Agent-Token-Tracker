@@ -17,12 +17,32 @@
 /** 已知的 agent 工具来源 */
 export type AgentSource = 'claude-code' | 'codex' | 'opencode' | 'antigravity' | 'grok' | 'unknown'
 
+/** 请求所属的认证渠道。未标记的历史记录按账号登录处理。 */
+export type UsageChannel = 'account' | 'api'
+
+export interface UsageUpstream {
+  id: string
+  label: string
+  baseUrl?: string
+}
+
+export type UsageScope = 'all' | 'account' | 'api' | `api:${string}`
+
+export type OpenLocalPathTarget =
+  | AgentSource
+  | 'cache'
+  | 'ssh-readme'
+  | 'remote-cache'
+  | { source: AgentSource; rootPath: string }
+
 /** 单条请求记录 (一次模型调用) */
 export interface RequestRecord {
   id: string
   /** ISO timestamp */
   timestamp: string
   source: AgentSource
+  usageChannel?: UsageChannel
+  upstream?: UsageUpstream
   /** 会话 ID，用于聚合到 SessionSummary */
   sessionId: string
   /** 会话标题（如有，否则用 ID 截断） */
@@ -85,6 +105,8 @@ export interface SessionSummary {
   sessionId: string
   title: string
   source: AgentSource
+  usageChannel?: UsageChannel
+  upstream?: UsageUpstream
   totalTokens: number
   requestCount: number
   lastActiveAt: string
@@ -103,6 +125,8 @@ export interface HeatmapCell {
 export interface DataSourceStatusItem {
   source: AgentSource
   label: string
+  usageChannel?: UsageChannel
+  upstream?: UsageUpstream
   rootPath: string
   rootExists: boolean
   healthy: boolean
@@ -337,6 +361,10 @@ export interface ReplaySessionOptions {
   conversationOnly?: boolean
   /** Maximum events returned after sorting/filtering. */
   limit?: number
+  /** Restrict duplicate session IDs to one authentication channel. */
+  usageChannel?: UsageChannel
+  /** Restrict duplicate API session IDs to one upstream profile. */
+  upstreamId?: string
 }
 
 /** 时间范围筛选 */
@@ -384,7 +412,7 @@ export interface TokenAPI {
   clearCache(): Promise<{ cleared: boolean }>
 
   /** 打开本地目录 */
-  openLocalPath(kind: AgentSource | 'cache' | 'ssh-readme' | 'remote-cache'): Promise<{ ok: boolean; path: string; error?: string }>
+  openLocalPath(target: OpenLocalPathTarget): Promise<{ ok: boolean; path: string; error?: string }>
 
   /** 获取远程 SSH 数据源配置 */
   getRemoteSourceSettings(): Promise<RemoteSourceSettings>

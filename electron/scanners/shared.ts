@@ -3,11 +3,13 @@ import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import readline from 'node:readline'
-import type { AgentSource, RequestRecord } from '../../src/types/api'
+import type { AgentSource, RequestRecord, UsageChannel, UsageUpstream } from '../../src/types/api'
 
 export interface SourceScanResult {
   source: AgentSource
   label: string
+  usageChannel?: UsageChannel
+  upstream?: UsageUpstream
   rootPath: string
   records: RequestRecord[]
   scannedFiles: number

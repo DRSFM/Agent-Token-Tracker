@@ -9,13 +9,21 @@ import { ModelDonut } from '@/components/overview/ModelDonut'
 import { SessionRanking } from '@/components/overview/SessionRanking'
 import { Heatmap } from '@/components/overview/Heatmap'
 import { RecentRequests } from '@/components/overview/RecentRequests'
-import { api, isMock } from '@/lib/api'
-import { useAsync } from '@/hooks/useTokenData'
-import type { DateRange, RankBy } from '@/types/api'
+import { isMock } from '@/lib/api'
+import type { RankBy } from '@/types/api'
 import { ChevronDown } from 'lucide-react'
-import { useAllRequests } from '@/hooks/useAllRequests'
+import { useScopedRequests } from '@/hooks/useAllRequests'
 import { estimateRecordsValue } from '@/lib/pricing'
 import { formatUsd, isToday } from '@/lib/format'
+import {
+  aggregateDaily,
+  aggregateHeatmap,
+  aggregateModels,
+  aggregateOverviewStats,
+  aggregateSessionRanking,
+  inRange,
+  lastNDays,
+} from '@/lib/aggregations'
 
 export default function OverviewPage() {
   const navigate = useNavigate()
@@ -23,23 +31,27 @@ export default function OverviewPage() {
   const [donutBy, setDonutBy] = useState<RankBy>('tokens')
   const [rankBy, setRankBy] = useState<RankBy>('tokens')
 
-  const range30: DateRange = useMemo(() => ({ kind: 'last-n-days', days: 30 }), [])
-  const trendRange: DateRange = useMemo(
-    () => ({ kind: 'last-n-days', days: trendDays }),
-    [trendDays],
+  const allRequests = useScopedRequests()
+  const records = allRequests.data ?? []
+  const range30 = useMemo(() => lastNDays(30), [])
+  const trendRange = useMemo(() => lastNDays(trendDays), [trendDays])
+  const range30Records = useMemo(
+    () => records.filter((record) => inRange(record, range30)),
+    [range30, records],
   )
-
-  const stats = useAsync(() => api.getOverviewStats(range30), [])
-  const trend = useAsync(() => api.getDailyTrend(trendRange), [trendDays])
-  const shares = useAsync(() => api.getModelShares(range30, donutBy), [donutBy])
-  const ranking = useAsync(() => api.getSessionRanking(range30, rankBy, 5), [rankBy])
-  const heatmap = useAsync(() => api.getHourlyHeatmap(range30), [])
-  const recent = useAsync(() => api.getRecentRequests(5), [])
-  const allRequests = useAllRequests()
+  const stats = useMemo(() => aggregateOverviewStats(records), [records])
+  const trend = useMemo(() => aggregateDaily(records, trendRange), [records, trendRange])
+  const shares = useMemo(() => aggregateModels(range30Records, donutBy), [donutBy, range30Records])
+  const ranking = useMemo(
+    () => aggregateSessionRanking(range30Records, rankBy, 5),
+    [range30Records, rankBy],
+  )
+  const heatmap = useMemo(() => aggregateHeatmap(range30Records), [range30Records])
+  const recent = useMemo(() => records.slice(0, 5), [records])
   const todayValue = useMemo(() => {
-    const estimated = estimateRecordsValue((allRequests.data ?? []).filter((record) => isToday(record.timestamp)))
+    const estimated = estimateRecordsValue(records.filter((record) => isToday(record.timestamp)))
     return estimated
-  }, [allRequests.data])
+  }, [records])
 
   return (
     <div className="space-y-5 pt-2">
@@ -59,37 +71,36 @@ export default function OverviewPage() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-        {stats.data && (
-          <>
+        <>
             <StatCard
               label="今日总 Tokens"
-              value={stats.data.todayTotalTokens}
-              deltaPct={stats.data.todayTotalDeltaPct}
+              value={stats.todayTotalTokens}
+              deltaPct={stats.todayTotalDeltaPct}
               icon={Database}
               iconClassName="bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300"
               details={[
-                { label: '原始总量', value: stats.data.todayRawTotalTokens },
-                { label: '缓存量', value: stats.data.todayCacheTokens },
+                { label: '原始总量', value: stats.todayRawTotalTokens },
+                { label: '缓存量', value: stats.todayCacheTokens },
               ]}
             />
             <StatCard
               label="请求次数"
-              value={stats.data.todayRequestCount}
-              deltaPct={stats.data.todayRequestDeltaPct}
+              value={stats.todayRequestCount}
+              deltaPct={stats.todayRequestDeltaPct}
               icon={Activity}
               iconClassName="bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300"
             />
             <StatCard
               label="平均每次"
-              value={stats.data.todayAvgPerRequest}
-              deltaPct={stats.data.todayAvgDeltaPct}
+              value={stats.todayAvgPerRequest}
+              deltaPct={stats.todayAvgDeltaPct}
               icon={TrendingUp}
               iconClassName="bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300"
             />
             <StatCard
               label="活跃会话"
-              value={stats.data.activeSessionCount}
-              deltaPct={stats.data.activeSessionDeltaPct}
+              value={stats.activeSessionCount}
+              deltaPct={stats.activeSessionDeltaPct}
               icon={Users}
               iconClassName="bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300"
             />
@@ -104,8 +115,7 @@ export default function OverviewPage() {
                 { label: '非缓存', value: formatUsd(todayValue.nonCachedUsd) },
               ]}
             />
-          </>
-        )}
+        </>
       </div>
 
       {/* 趋势 + 模型占比 */}
@@ -126,7 +136,7 @@ export default function OverviewPage() {
             }
           />
           <CardBody className="pt-2">
-            {trend.data && <DailyTrendChart data={trend.data} />}
+            <DailyTrendChart data={trend} />
           </CardBody>
         </Card>
 
@@ -144,7 +154,7 @@ export default function OverviewPage() {
               />
             }
           />
-          <CardBody>{shares.data && <ModelDonut data={shares.data} />}</CardBody>
+          <CardBody><ModelDonut data={shares} /></CardBody>
         </Card>
       </div>
 
@@ -164,12 +174,12 @@ export default function OverviewPage() {
               />
             }
           />
-          <CardBody>{ranking.data && <SessionRanking data={ranking.data} />}</CardBody>
+          <CardBody><SessionRanking data={ranking} /></CardBody>
         </Card>
 
         <Card>
           <CardHeader title="时段热力" />
-          <CardBody>{heatmap.data && <Heatmap data={heatmap.data} />}</CardBody>
+          <CardBody><Heatmap data={heatmap} /></CardBody>
         </Card>
 
         <Card>
@@ -186,7 +196,7 @@ export default function OverviewPage() {
             }
           />
           <CardBody className="pt-1">
-            {recent.data && <RecentRequests data={recent.data} />}
+            <RecentRequests data={recent} />
             <div className="flex justify-center pt-1">
               <ChevronDown className="w-4 h-4 text-slate-300" />
             </div>

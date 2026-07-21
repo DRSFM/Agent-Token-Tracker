@@ -141,6 +141,49 @@ test('scanCodex uses last_token_usage total tokens and ignores cumulative totals
   }
 })
 
+test('scanCodex annotates API profile records and reused cache entries', async () => {
+  const root = await tempRoot('agent-token-codex-upstream')
+  try {
+    const filePath = path.join(root, '2026', '07', '21', 'rollout.jsonl')
+    await writeJsonl(filePath, [
+      JSON.stringify({
+        type: 'session_meta',
+        timestamp: '2026-07-21T01:00:00.000Z',
+        payload: { id: 'api-session', cwd: '/tmp/api-project' },
+      }),
+      JSON.stringify({
+        type: 'event_msg',
+        timestamp: '2026-07-21T01:00:01.000Z',
+        payload: {
+          type: 'token_count',
+          info: { last_token_usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } },
+        },
+      }),
+    ])
+    const options = {
+      label: 'API · AnyRouter',
+      usageChannel: 'api' as const,
+      upstream: { id: 'anyrouter', label: 'AnyRouter', baseUrl: 'https://anyrouter.test/v1' },
+    }
+
+    const first = await scanCodex(new Map(), root, options)
+    assert.equal(first.usageChannel, 'api')
+    assert.equal(first.upstream?.id, 'anyrouter')
+    assert.equal(first.records[0].usageChannel, 'api')
+    assert.equal(first.records[0].upstream?.label, 'AnyRouter')
+
+    const cache = new Map(first.cacheEntries.map((entry) => [cacheKey(entry.source, entry.filePath), entry]))
+    const second = await scanCodex(cache, root, {
+      ...options,
+      upstream: { ...options.upstream, label: 'AnyRouter Updated' },
+    })
+    assert.equal(second.reusedFiles, 1)
+    assert.equal(second.records[0].upstream?.label, 'AnyRouter Updated')
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test('openCodeRowsToRecords reads model and cache counters from assistant message data', () => {
   const records = openCodeRowsToRecords(
     [

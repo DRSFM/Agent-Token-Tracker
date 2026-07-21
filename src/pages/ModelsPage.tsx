@@ -3,7 +3,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { RangeSelect, type RangeSelectValue } from '@/components/filters/RangeSelect'
 import { ModelDonut } from '@/components/overview/ModelDonut'
 import { ModelTable } from '@/components/models/ModelTable'
-import { useAllRequests } from '@/hooks/useAllRequests'
+import { useScopedRequests } from '@/hooks/useAllRequests'
 import { aggregateModels, allTimeRange, inRange, lastNDays } from '@/lib/aggregations'
 import { formatNumber, formatPercent } from '@/lib/format'
 import { LoadingState, EmptyState, ErrorState } from '@/components/ui/states'
@@ -19,7 +19,7 @@ const RANGE_OPTIONS = [
 
 export default function ModelsPage() {
   const [rangeValue, setRangeValue] = useState<RangeSelectValue>(30)
-  const { data, loading, error, refresh } = useAllRequests()
+  const { data, loading, error, refresh } = useScopedRequests()
   const range = useMemo(
     () => (rangeValue === 'all' ? allTimeRange(data ?? []) : lastNDays(rangeValue)),
     [data, rangeValue],

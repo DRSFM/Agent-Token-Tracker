@@ -7,6 +7,7 @@
 ## 功能
 
 - **概览**：今日 / 7 天 / 30 天 token 与请求数，趋势折线、模型占比、会话排行、活跃热力图、最近请求列表
+- **统计口径**：全局切换总计、官方账号登录、全部 API，或按 AnyRouter、muyuanpub 等 `.codex-api` 上游单独查看
 - **会话**：按 sessionId 聚合，支持搜索、按 token / 请求数 / 最近活跃排序
 - **回放**：按会话读取 JSONL 历史，以聊天记录方式展示用户输入与最终助手回复
 - **模型**：各模型用量分布、走势 sparkline
@@ -23,6 +24,7 @@
 | --- | --- |
 | Claude Code | `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl` |
 | Codex CLI | `~/.codex/sessions/**/*.jsonl` |
+| Codex API profiles | `~/.codex-api/sessions/**/*.jsonl`、`~/.codex-api/profiles/<profile>/sessions/**/*.jsonl` |
 | OpenCode | `~/.local/share/opencode/opencode.db`（也会识别平台数据目录） |
 | Antigravity | Antigravity / Google IDE 的 `state.vscdb` |
 | Grok | `~/.grok/logs/unified.jsonl`（精确请求用量），旧版回退到 `~/.grok/sessions/**/signals.json` |
@@ -55,6 +57,12 @@ agent-token-tracker
 启动后会自动扫描各工具的本地日志目录，无需配置。如果对应工具尚未在本机产生日志，对应来源会显示为空。OpenCode 与 Antigravity 的 SQLite 数据库由应用内置的 SQLite 运行库只读解析，不要求另一台电脑额外安装 `sqlite3` 命令。
 
 热力图按 `(weekday, hour)` 统计活跃度；最近请求列表实时反映最新写入的会话条目。
+
+### Codex API 上游统计
+
+应用会读取 `.codex-api/profiles.json`、各 profile 的 `config.toml` 和会话目录，自动识别 AnyRouter、muyuanpub 等已配置上游。左侧「统计口径」可在总计、官方账号登录、全部 API 和单个 API 上游之间切换；所选口径会同时作用于概览、会话、回放、模型和趋势页，并保存在本机。
+
+这里统计的是本地 JSONL 中已经记录的请求与 token。应用不会读取 API Key，也不查询上游服务商的余额、账单或服务端用量，因此没有写入本地会话日志的调用不会被计入。
 
 ### Codex 账号与余量
 

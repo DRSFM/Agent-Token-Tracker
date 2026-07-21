@@ -7,19 +7,21 @@ import { SourceTabs, type SourceFilter } from '@/components/filters/SourceTabs'
 import { SessionList, type SessionSortKey } from '@/components/sessions/SessionList'
 import { SessionDetail } from '@/components/sessions/SessionDetail'
 import { Select } from '@/components/ui/select'
-import { useAllRequests } from '@/hooks/useAllRequests'
+import { useScopedRequests } from '@/hooks/useAllRequests'
 import {
   aggregateSessions,
   allTimeRange,
   inRange,
   lastNDays,
   rangeDayCount,
+  sessionIdentity,
   type SessionAggregate,
 } from '@/lib/aggregations'
 import { estimateRecordsValue } from '@/lib/pricing'
 import { formatNumber, formatUsd } from '@/lib/format'
 import { LoadingState, EmptyState, ErrorState } from '@/components/ui/states'
 import { cn } from '@/lib/utils'
+import { isApiUsageScope } from '@/lib/usage-scope'
 
 const SORT_OPTIONS = [
   { key: 'tokens', label: 'Tokens', icon: ArrowDownWideNarrow },
@@ -49,7 +51,11 @@ export default function SessionsPage() {
   const [sortDesc, setSortDesc] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  const { data, loading, error, refresh } = useAllRequests()
+  const { data, loading, error, refresh, scope } = useScopedRequests()
+
+  useEffect(() => {
+    if (isApiUsageScope(scope) && source !== 'all') setSource('all')
+  }, [scope, source])
 
   // 从 TopBar 跳转过来时同步 URL ?q=
   useEffect(() => {
@@ -148,10 +154,10 @@ export default function SessionsPage() {
     }
   }, [range, sessions, visibleRecords])
 
-  const selected = sessions.find((s) => s.sessionId === selectedId) ?? null
+  const selected = sessions.find((session) => sessionIdentity(session) === selectedId) ?? null
 
   useEffect(() => {
-    if (selectedId && !sessions.some((session) => session.sessionId === selectedId)) {
+    if (selectedId && !sessions.some((session) => sessionIdentity(session) === selectedId)) {
       setSelectedId(null)
     }
   }, [selectedId, sessions])
@@ -179,7 +185,7 @@ export default function SessionsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <SourceTabs value={source} onChange={setSource} />
+          {!isApiUsageScope(scope) && <SourceTabs value={source} onChange={setSource} />}
           <Select
             value={model}
             onChange={setModel}

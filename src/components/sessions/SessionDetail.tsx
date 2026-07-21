@@ -147,7 +147,7 @@ export function SessionDetail({ session, records }: Props) {
           <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100 break-all">
             {session.title}
           </h3>
-          <SourceBadge source={session.source} />
+          <SourceBadge source={session.source} usageChannel={session.usageChannel} upstream={session.upstream} />
         </div>
         <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 break-all">
           会话 ID：<code className="font-mono">{session.sessionId}</code>

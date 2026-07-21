@@ -1,4 +1,4 @@
-import type { SessionAggregate } from '@/lib/aggregations'
+import { sessionIdentity, type SessionAggregate } from '@/lib/aggregations'
 import { formatNumber, formatRelativeMinutes, formatUsd } from '@/lib/format'
 import { SourceBadge } from '@/components/filters/SourceBadge'
 import { cn } from '@/lib/utils'
@@ -53,12 +53,13 @@ export function SessionList({ rows, sortKey, sortDesc, onSort, selectedId, onSel
         </div>
         <ul className="space-y-0.5 mt-1 max-h-[560px] overflow-y-auto pr-1">
           {rows.map((s) => {
-            const isActive = selectedId === s.sessionId
+            const identity = sessionIdentity(s)
+            const isActive = selectedId === identity
             const modelLabel = primaryModelLabel(s.models)
             return (
               <li
-                key={s.sessionId}
-                onClick={() => onSelect(s.sessionId)}
+                key={identity}
+                onClick={() => onSelect(identity)}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition relative',
                   isActive
@@ -84,7 +85,7 @@ export function SessionList({ rows, sortKey, sortDesc, onSort, selectedId, onSel
                   </span>
                 </div>
                 <div className="w-28 shrink-0">
-                  <SourceBadge source={s.source} />
+                  <SourceBadge source={s.source} usageChannel={s.usageChannel} upstream={s.upstream} />
                 </div>
                 <div className="w-20 shrink-0 text-right tabular-nums text-slate-600 dark:text-slate-300 text-xs">
                   {formatNumber(s.requestCount)}

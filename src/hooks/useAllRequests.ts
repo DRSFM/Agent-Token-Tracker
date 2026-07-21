@@ -3,8 +3,10 @@
 // 后端 getRecentRequests(N) 已经返回完整 RequestRecord（含 source / sessionId
 // / model / tokens 等）。这里用于“全部”类页面，所以请求完整扫描结果，三个页面共用同一份。
 // 监听 onDataChanged 后增量重拉。
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
+import { filterRecordsByUsageScope } from '@/lib/usage-scope'
+import { useUsageScope } from '@/stores/usage-scope'
 import type { RequestRecord } from '@/types/api'
 
 const FETCH_LIMIT = Number.MAX_SAFE_INTEGER
@@ -78,5 +80,20 @@ export function useAllRequests() {
     loading: cache.loading,
     error: cache.error,
     refresh: () => load(true),
+  }
+}
+
+export function useScopedRequests() {
+  const query = useAllRequests()
+  const scope = useUsageScope((state) => state.scope)
+  const data = useMemo(
+    () => (query.data ? filterRecordsByUsageScope(query.data, scope) : null),
+    [query.data, scope],
+  )
+
+  return {
+    ...query,
+    data,
+    scope,
   }
 }

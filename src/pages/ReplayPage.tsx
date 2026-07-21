@@ -7,8 +7,16 @@ import { SourceBadge } from '@/components/filters/SourceBadge'
 import { ConversationEventList } from '@/components/replay/ConversationView'
 import { OpenAIMessageList, flattenEventForSearch } from '@/components/replay/OpenAIMessageView'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
-import { useAllRequests } from '@/hooks/useAllRequests'
-import { aggregateSessions, allTimeRange, inRange, lastNDays, type SessionAggregate } from '@/lib/aggregations'
+import { useScopedRequests } from '@/hooks/useAllRequests'
+import { isApiUsageScope } from '@/lib/usage-scope'
+import {
+  aggregateSessions,
+  allTimeRange,
+  inRange,
+  lastNDays,
+  sessionIdentity,
+  type SessionAggregate,
+} from '@/lib/aggregations'
 import { api } from '@/lib/api'
 import { formatNumber, formatRelativeMinutes } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -85,7 +93,14 @@ export default function ReplayPage() {
   }, [viewMode])
 
   const selectedId = searchParams.get('sid')
-  const { data, loading, error, refresh } = useAllRequests()
+  const selectedSourceParam = searchParams.get('source')
+  const selectedChannelParam = searchParams.get('channel')
+  const selectedUpstreamParam = searchParams.get('upstream')
+  const { data, loading, error, refresh, scope } = useScopedRequests()
+
+  useEffect(() => {
+    if (isApiUsageScope(scope) && source !== 'all') setSource('all')
+  }, [scope, source])
 
   const range = useMemo(
     () => (rangeValue === 'all' ? allTimeRange(data ?? []) : lastNDays(rangeValue)),
@@ -110,21 +125,30 @@ export default function ReplayPage() {
 
   const selected = useMemo(() => {
     if (!sessions.length) return null
-    return sessions.find((session) => session.sessionId === selectedId) ?? sessions[0]
-  }, [sessions, selectedId])
+    return sessions.find((session) => (
+      session.sessionId === selectedId
+      && (!selectedSourceParam || session.source === selectedSourceParam)
+      && (!selectedChannelParam || (session.usageChannel ?? 'account') === selectedChannelParam)
+      && (!selectedUpstreamParam || session.upstream?.id === selectedUpstreamParam)
+    )) ?? sessions[0]
+  }, [sessions, selectedChannelParam, selectedId, selectedSourceParam, selectedUpstreamParam])
 
   const selectedRecords = useMemo(
-    () => (selected ? visibleRecords.filter((record) => record.sessionId === selected.sessionId) : []),
+    () => (selected
+      ? visibleRecords.filter((record) => sessionIdentity(record) === sessionIdentity(selected))
+      : []),
     [selected, visibleRecords],
   )
 
   const conversationOnly = viewMode === 'standard'
   const replayOptions = useMemo<ReplaySessionOptions>(() => ({
     ...replayWindowFromRequests(selectedRecords),
+    usageChannel: selected?.usageChannel ?? 'account',
+    upstreamId: selected?.upstream?.id,
     includeRaw: false,
     conversationOnly,
     limit: REPLAY_LIMIT,
-  }), [selectedRecords, conversationOnly])
+  }), [selected, selectedRecords, conversationOnly])
   const selectedSessionId = selected?.sessionId
   const selectedSource = selected?.source
   const replayFrom = replayOptions.from
@@ -134,6 +158,8 @@ export default function ReplayPage() {
     ? [
       selected.sessionId,
       selected.source,
+      selected.usageChannel ?? 'account',
+      selected.upstream?.id ?? '',
       replayFrom ?? '',
       replayTo ?? '',
       REPLAY_LIMIT,
@@ -156,6 +182,8 @@ export default function ReplayPage() {
     void api.getReplaySession(selectedSessionId, selectedSource, {
       from: replayFrom,
       to: replayTo,
+      usageChannel: replayOptions.usageChannel,
+      upstreamId: replayOptions.upstreamId,
       includeRaw: false,
       conversationOnly,
       limit: REPLAY_LIMIT,
@@ -175,7 +203,7 @@ export default function ReplayPage() {
     return () => {
       cancelled = true
     }
-  }, [loadedKey, replayFrom, replayKey, replayTo, selectedSessionId, selectedSource, conversationOnly])
+  }, [loadedKey, replayFrom, replayKey, replayTo, replayOptions.usageChannel, replayOptions.upstreamId, selectedSessionId, selectedSource, conversationOnly])
 
   const filteredEvents = useMemo(() => {
     if (!events) return []
@@ -193,6 +221,9 @@ export default function ReplayPage() {
     const next = new URLSearchParams(searchParams)
     next.set('sid', session.sessionId)
     next.set('source', session.source)
+    next.set('channel', session.usageChannel ?? 'account')
+    if (session.upstream?.id) next.set('upstream', session.upstream.id)
+    else next.delete('upstream')
     setSearchParams(next, { replace: true })
   }
 
@@ -224,7 +255,7 @@ export default function ReplayPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <SourceTabs value={source} onChange={setSource} />
+          {!isApiUsageScope(scope) && <SourceTabs value={source} onChange={setSource} />}
           <RangeSelect value={rangeValue} onChange={setRangeValue} options={RANGE_OPTIONS} />
         </div>
       </div>
@@ -267,9 +298,9 @@ export default function ReplayPage() {
               <ul className="space-y-1">
                 {sessions.map((session) => (
                   <SessionReplayRow
-                    key={session.sessionId}
+                    key={sessionIdentity(session)}
                     session={session}
-                    active={session.sessionId === selected?.sessionId}
+                    active={selected ? sessionIdentity(session) === sessionIdentity(selected) : false}
                     onClick={() => selectSession(session)}
                   />
                 ))}
@@ -294,7 +325,7 @@ export default function ReplayPage() {
                       {selected.sessionId}
                     </div>
                   </div>
-                  <SourceBadge source={selected.source} />
+                  <SourceBadge source={selected.source} usageChannel={selected.usageChannel} upstream={selected.upstream} />
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -496,7 +527,7 @@ function ReplayFocusOverlay({
             <h2 className="truncate text-lg font-semibold text-slate-900 dark:text-slate-100">
               {session.title}
             </h2>
-            <SourceBadge source={session.source} />
+            <SourceBadge source={session.source} usageChannel={session.usageChannel} upstream={session.upstream} />
           </div>
           <div className="mt-1 truncate font-mono text-xs text-slate-400">
             {session.sessionId}
@@ -732,7 +763,7 @@ function SessionReplayRow({
               <span>{formatRelativeMinutes(session.lastActiveAt)}</span>
             </div>
           </div>
-          <SourceBadge source={session.source} />
+          <SourceBadge source={session.source} usageChannel={session.usageChannel} upstream={session.upstream} />
         </div>
       </button>
     </li>

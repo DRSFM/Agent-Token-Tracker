@@ -62,3 +62,31 @@ test('weightedTokenTotal recomputes stale Codex cached records from raw and cach
   assert.equal(session.nonCachedBillableTokens, 70)
   assert.equal(aggregateModels([staleCodexRecord])[0].weightedTotalTokens, 78)
 })
+
+test('sessions with the same ID stay separate across account and API upstreams', () => {
+  const account: RequestRecord = {
+    ...baseRecord,
+    id: 'account',
+    source: 'codex',
+    sessionId: 'shared-session',
+  }
+  const anyrouter: RequestRecord = {
+    ...account,
+    id: 'anyrouter',
+    usageChannel: 'api',
+    upstream: { id: 'anyrouter', label: 'AnyRouter' },
+  }
+  const muyuanpub: RequestRecord = {
+    ...account,
+    id: 'muyuanpub',
+    usageChannel: 'api',
+    upstream: { id: 'muyuanpub', label: 'muyuanpub' },
+  }
+
+  const sessions = aggregateSessions([account, anyrouter, muyuanpub])
+  assert.equal(sessions.length, 3)
+  assert.deepEqual(
+    sessions.map((session) => session.upstream?.id ?? 'account'),
+    ['account', 'anyrouter', 'muyuanpub'],
+  )
+})

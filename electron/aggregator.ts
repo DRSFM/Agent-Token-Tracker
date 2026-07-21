@@ -9,11 +9,13 @@ import type {
   ModelShare,
   OverviewStats,
   RankBy,
+  ReplaySessionOptions,
   RequestRecord,
   SessionSummary,
 } from '../src/types/api'
 import { claudeCodeRoot, scanClaudeCode } from './scanners/claude'
-import { codexSessionsRoot, scanCodex } from './scanners/codex'
+import { codexSessionsRoot, discoverCodexScanTargets, scanCodex } from './scanners/codex'
+import { codexApiRoot } from './scanners/codex-profiles'
 import { openCodeDataRoot, scanOpenCode } from './scanners/opencode'
 import { antigravityDataRoot, scanAntigravity } from './scanners/antigravity'
 import { grokDataRoot, scanGrok } from './scanners/grok'
@@ -41,7 +43,7 @@ interface ScanCacheFile {
   files: CachedSourceFile[]
 }
 
-const CACHE_VERSION = 4
+const CACHE_VERSION = 5
 const CACHE_FILE_NAME = 'scan-cache.json'
 
 const emptyState = (): ScanState => ({
@@ -177,6 +179,15 @@ function sameLocalDay(record: RequestRecord, target: Date) {
   return dateKey(new Date(record.timestamp)) === dateKey(target)
 }
 
+function recordSessionIdentity(record: RequestRecord) {
+  return [
+    record.source,
+    record.usageChannel ?? 'account',
+    record.upstream?.id ?? '',
+    record.sessionId,
+  ].join('\u0000')
+}
+
 function weekdayMondayFirst(date: Date) {
   return (date.getDay() + 6) % 7
 }
@@ -205,12 +216,13 @@ export class TokenDataStore {
   private async runScan() {
     const cache = await loadScanCache()
     const remoteSettings = await getRemoteSourceSettings()
+    const codexTargets = await discoverCodexScanTargets()
     const scanTasks: Promise<SourceScanResult>[] = [
       scanClaudeCode(cache),
-      scanCodex(cache),
       scanOpenCode(cache),
       scanAntigravity(cache),
       scanGrok(cache),
+      ...codexTargets.map((target) => scanCodex(cache, target.rootPath, target)),
     ]
 
     if (remoteSettings.enabled && remoteSettings.host) {
@@ -261,6 +273,7 @@ export class TokenDataStore {
     this.watcher = chokidar.watch([
       claudeCodeRoot(),
       codexSessionsRoot(),
+      codexApiRoot(),
       openCodeDataRoot(),
       antigravityDataRoot(),
       grokDataRoot(),
@@ -272,6 +285,8 @@ export class TokenDataStore {
       },
     })
 
+    void this.addCodexWatchPaths()
+
     const schedule = (filePath: string) => {
       const basename = path.basename(filePath)
       if (
@@ -279,16 +294,27 @@ export class TokenDataStore {
         && !basename.startsWith('opencode.db')
         && !basename.endsWith('.db')
         && basename !== 'signals.json'
+        && basename !== 'profiles.json'
+        && basename !== 'config.toml'
       ) return
       if (this.watchTimer) clearTimeout(this.watchTimer)
       this.watchTimer = setTimeout(() => {
-        void this.rescan().then(onDataChanged).catch(() => {})
+        void this.rescan()
+          .then(() => this.addCodexWatchPaths())
+          .then(onDataChanged)
+          .catch(() => {})
       }, 500)
     }
 
     this.watcher.on('add', schedule)
     this.watcher.on('change', schedule)
     this.watcher.on('unlink', schedule)
+  }
+
+  private async addCodexWatchPaths() {
+    if (!this.watcher) return
+    const targets = await discoverCodexScanTargets()
+    await this.watcher.add(targets.map((target) => target.rootPath))
   }
 
   async stopWatching() {
@@ -327,8 +353,8 @@ export class TokenDataStore {
     const yesterdayAvgPerRequest = yesterdayRequestCount
       ? Math.round(yesterdayTotalTokens / yesterdayRequestCount)
       : 0
-    const activeSessionCount = new Set(todayRecords.map((record) => record.sessionId)).size
-    const yesterdayActiveSessionCount = new Set(yesterdayRecords.map((record) => record.sessionId)).size
+    const activeSessionCount = new Set(todayRecords.map(recordSessionIdentity)).size
+    const yesterdayActiveSessionCount = new Set(yesterdayRecords.map(recordSessionIdentity)).size
 
     return {
       todayTotalTokens,
@@ -391,10 +417,13 @@ export class TokenDataStore {
     const { records } = await this.ensureScanned()
     const buckets = new Map<string, SessionSummary>()
     for (const record of filterByRange(records, range)) {
-      const current = buckets.get(record.sessionId) ?? {
+      const identity = recordSessionIdentity(record)
+      const current = buckets.get(identity) ?? {
         sessionId: record.sessionId,
         title: record.sessionTitle ?? record.sessionId,
         source: record.source,
+        usageChannel: record.usageChannel,
+        upstream: record.upstream,
         totalTokens: 0,
         requestCount: 0,
         lastActiveAt: record.timestamp,
@@ -404,7 +433,7 @@ export class TokenDataStore {
       if (new Date(record.timestamp) > new Date(current.lastActiveAt)) {
         current.lastActiveAt = record.timestamp
       }
-      buckets.set(record.sessionId, current)
+      buckets.set(identity, current)
     }
 
     return [...buckets.values()]
@@ -440,13 +469,19 @@ export class TokenDataStore {
     return records.slice(0, Math.max(0, limit))
   }
 
-  async getReplayFilesForSession(sessionId: string, source?: RequestRecord['source']) {
+  async getReplayFilesForSession(
+    sessionId: string,
+    source?: RequestRecord['source'],
+    options: ReplaySessionOptions = {},
+  ) {
     const { records } = await this.ensureScanned()
     const files = new Set<string>()
 
     for (const record of records) {
       if (record.sessionId !== sessionId) continue
       if (source && source !== 'unknown' && record.source !== source) continue
+      if (options.usageChannel && (record.usageChannel ?? 'account') !== options.usageChannel) continue
+      if (options.upstreamId && record.upstream?.id !== options.upstreamId) continue
       const filePath = filePathFromRecordId(record.id, record.source)
       if (filePath) files.add(filePath)
     }
@@ -485,6 +520,8 @@ function sourceStatusFromScanResult(result: SourceScanResult): DataSourceStatus[
   return {
     source: result.source,
     label: result.label,
+    usageChannel: result.usageChannel,
+    upstream: result.upstream,
     rootPath: result.rootPath,
     rootExists: result.rootExists,
     healthy: result.rootExists && !result.lastError,

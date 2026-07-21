@@ -1,6 +1,7 @@
 import os from 'node:os'
 import path from 'node:path'
-import type { RequestRecord } from '../../src/types/api'
+import type { RequestRecord, UsageChannel, UsageUpstream } from '../../src/types/api'
+import { discoverCodexApiTargets } from './codex-profiles'
 import {
   asNumber,
   asRecord,
@@ -22,9 +23,43 @@ export function codexSessionsRoot() {
   return path.join(os.homedir(), '.codex', 'sessions')
 }
 
+export interface CodexScanOptions {
+  label?: string
+  usageChannel?: UsageChannel
+  upstream?: UsageUpstream
+}
+
+export interface CodexScanTarget extends CodexScanOptions {
+  rootPath: string
+}
+
+export async function discoverCodexScanTargets(): Promise<CodexScanTarget[]> {
+  const apiTargets = await discoverCodexApiTargets()
+  return [
+    {
+      rootPath: codexSessionsRoot(),
+      label: 'Codex',
+      usageChannel: 'account',
+    },
+    ...apiTargets.map((target) => ({
+      ...target,
+      usageChannel: 'api' as const,
+    })),
+  ]
+}
+
+function withScanMetadata(record: RequestRecord, options: CodexScanOptions): RequestRecord {
+  return {
+    ...record,
+    usageChannel: options.usageChannel ?? 'account',
+    upstream: options.upstream,
+  }
+}
+
 export async function scanCodex(
   cache = new Map<string, CachedSourceFile>(),
   root = codexSessionsRoot(),
+  options: CodexScanOptions = {},
 ): Promise<SourceScanResult> {
   const rootExists = await pathExists(root)
   const files = await listJsonlFiles(root)
@@ -40,8 +75,9 @@ export async function scanCodex(
 
       const cached = reusableCachedFile('codex', metadata, cache)
       if (cached) {
-        records.push(...cached.records)
-        cacheEntries.push(cached)
+        const cachedRecords = cached.records.map((record) => withScanMetadata(record, options))
+        records.push(...cachedRecords)
+        cacheEntries.push({ ...cached, records: cachedRecords })
         reusedFiles += 1
         return
       }
@@ -84,7 +120,7 @@ export async function scanCodex(
           const effectiveTotal = totalTokens || inputTokens + outputTokens
           const weightedTotalTokens = Math.round(inputTokens + outputTokens - cacheTokens * 0.9)
 
-          fileRecords.push({
+          fileRecords.push(withScanMetadata({
             id: `codex:${filePath}:${lineNumber}`,
             timestamp: normalizeIso(row.timestamp),
             source: 'codex',
@@ -98,7 +134,7 @@ export async function scanCodex(
             rawTotalTokens: effectiveTotal,
             weightedTotalTokens,
             totalTokens: weightedTotalTokens,
-          })
+          }, options))
         })
         parsedFiles += 1
       } catch {
@@ -119,7 +155,9 @@ export async function scanCodex(
 
   return {
     source: 'codex',
-    label: 'Codex',
+    label: options.label ?? 'Codex',
+    usageChannel: options.usageChannel ?? 'account',
+    upstream: options.upstream,
     rootPath: root,
     records,
     scannedFiles: files.length,

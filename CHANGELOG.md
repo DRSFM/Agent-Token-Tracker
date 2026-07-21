@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+- 新增全局统计口径，可切换总计、官方账号登录、全部 API，以及 AnyRouter、muyuanpub 等单个 `.codex-api` 上游
+- 自动发现 `.codex-api` 根 profile 和 `profiles.json` 中的独立 profile，并将渠道与上游元数据接入概览、会话、回放、模型和趋势
+
+### Fixed
+- 相同 sessionId 出现在账号与不同 API profile 时保持独立聚合，回放只读取所选 profile 的候选文件
+- 设置页 API 数据源的“打开”按钮改为打开该 profile 的实际会话目录
+
 ## [1.2.16] - 2026-07-11
 
 ### Added

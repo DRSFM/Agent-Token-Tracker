@@ -18,9 +18,9 @@ import { cn } from '@/lib/utils'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import type {
-  AgentSource,
   DataSourceStatus,
   NetworkSettings,
+  OpenLocalPathTarget,
   RemoteSourceSettings,
   RemoteSyncStatus,
   UpdateProviderSettings,
@@ -193,7 +193,7 @@ export default function SettingsPage() {
     }
   }
 
-  const onOpenPath = (kind: AgentSource | 'cache') => {
+  const onOpenPath = (kind: OpenLocalPathTarget) => {
     void api.openLocalPath(kind)
   }
 
@@ -772,7 +772,7 @@ export default function SettingsPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => onOpenPath(source.source)}
+                  onClick={() => onOpenPath({ source: source.source, rootPath: source.rootPath })}
                   className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
                 >
                   <FolderOpen className="w-3.5 h-3.5" />

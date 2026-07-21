@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { formatRelativeMinutes } from '@/lib/format'
 import type { DataSourceStatus } from '@/types/api'
+import { UsageScopePicker } from '@/components/filters/UsageScopePicker'
 
 const navItems = [
   { to: '/overview', label: '概览', icon: LayoutGrid },
@@ -86,6 +87,8 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <UsageScopePicker sources={status?.sources ?? []} />
 
       <div className="m-3 p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/60">
         <div className="flex items-center justify-between mb-1.5">
