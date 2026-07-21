@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.2.17] - 2026-07-21
+
 ### Added
 - 新增全局统计口径，可切换总计、官方账号登录、全部 API，以及 AnyRouter、muyuanpub 等单个 `.codex-api` 上游
 - 自动发现 `.codex-api` 根 profile 和 `profiles.json` 中的独立 profile，并将渠道与上游元数据接入概览、会话、回放、模型和趋势
