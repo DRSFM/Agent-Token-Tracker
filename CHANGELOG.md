@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.2.18] - 2026-07-23
+
+### Fixed
+- 修复 apicodex Desktop 在 profile 临时文件被锁定或删除时触发 Tracker 主进程 `EPERM stat` 崩溃
+- API profile 文件监听跳过 `.tmp`、`tmp`、`bundled-*` 运行时目录，并补充 watcher 错误兜底
+
 ## [1.2.17] - 2026-07-21
 
 ### Added

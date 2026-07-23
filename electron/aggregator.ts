@@ -15,7 +15,7 @@ import type {
 } from '../src/types/api'
 import { claudeCodeRoot, scanClaudeCode } from './scanners/claude'
 import { codexSessionsRoot, discoverCodexScanTargets, scanCodex } from './scanners/codex'
-import { codexApiRoot } from './scanners/codex-profiles'
+import { codexApiRoot, isCodexApiTransientPath } from './scanners/codex-profiles'
 import { openCodeDataRoot, scanOpenCode } from './scanners/opencode'
 import { antigravityDataRoot, scanAntigravity } from './scanners/antigravity'
 import { grokDataRoot, scanGrok } from './scanners/grok'
@@ -279,13 +279,24 @@ export class TokenDataStore {
       grokDataRoot(),
     ], {
       ignoreInitial: true,
+      ignorePermissionErrors: true,
+      ignored: (filePath) => isCodexApiTransientPath(filePath),
       awaitWriteFinish: {
         stabilityThreshold: 750,
         pollInterval: 100,
       },
     })
 
-    void this.addCodexWatchPaths()
+    const handleWatchError = (error: unknown) => {
+      const code = error && typeof error === 'object' && 'code' in error
+        ? String((error as { code?: unknown }).code ?? '')
+        : ''
+      if (code === 'EPERM' || code === 'EACCES' || code === 'ENOENT') return
+      console.error('[token-data] file watcher error', error)
+    }
+
+    this.watcher.on('error', handleWatchError)
+    void this.addCodexWatchPaths().catch(handleWatchError)
 
     const schedule = (filePath: string) => {
       const basename = path.basename(filePath)
@@ -302,7 +313,7 @@ export class TokenDataStore {
         void this.rescan()
           .then(() => this.addCodexWatchPaths())
           .then(onDataChanged)
-          .catch(() => {})
+          .catch(handleWatchError)
       }, 500)
     }
 

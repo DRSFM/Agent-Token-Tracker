@@ -3,7 +3,10 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { discoverCodexApiTargets } from '../../electron/scanners/codex-profiles'
+import {
+  discoverCodexApiTargets,
+  isCodexApiTransientPath,
+} from '../../electron/scanners/codex-profiles'
 
 async function tempRoot(name: string) {
   return fs.mkdtemp(path.join(os.tmpdir(), `${name}-`))
@@ -77,5 +80,33 @@ test('API Codex profile discovery returns no source for a missing root', async (
     assert.deepEqual(await discoverCodexApiTargets(path.join(parent, 'not-created')), [])
   } finally {
     await fs.rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('API Codex watcher ignores profile runtime directories but keeps sessions', async () => {
+  const root = await tempRoot('agent-token-codex-watch-paths')
+  try {
+    assert.equal(
+      isCodexApiTransientPath(path.join(root, 'profiles', 'muyuanpub', '.tmp', 'bundled-marketplaces', 'chained-batch.js'), root),
+      true,
+    )
+    assert.equal(
+      isCodexApiTransientPath(path.join(root, 'profiles', 'muyuanpub', 'tmp', 'arg0', 'chained-batch.js'), root),
+      true,
+    )
+    assert.equal(
+      isCodexApiTransientPath(path.join(root, 'profiles', 'muyuanpub', 'bundled-marketplaces', 'chained-batch.js'), root),
+      true,
+    )
+    assert.equal(
+      isCodexApiTransientPath(path.join(root, 'profiles', 'muyuanpub', 'sessions', '2026', 'session.jsonl'), root),
+      false,
+    )
+    assert.equal(
+      isCodexApiTransientPath(path.join(path.dirname(root), 'outside', 'tmp', 'chained-batch.js'), root),
+      false,
+    )
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
   }
 })

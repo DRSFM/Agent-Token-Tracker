@@ -24,6 +24,18 @@ export function codexApiRoot() {
   return path.join(os.homedir(), '.codex-api')
 }
 
+export function isCodexApiTransientPath(targetPath: string, apiRoot = codexApiRoot()) {
+  const relative = path.relative(path.resolve(apiRoot), path.resolve(targetPath))
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return false
+  }
+
+  return relative.split(path.sep).some((segment) => {
+    const normalized = segment.toLowerCase()
+    return normalized === '.tmp' || normalized === 'tmp' || normalized.startsWith('bundled-')
+  })
+}
+
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
 }
