@@ -15,8 +15,6 @@ import {
   Server,
   Cloud,
   Github,
-  Mail,
-  LogIn,
   LogOut,
   ShieldCheck,
 } from 'lucide-react'
@@ -98,9 +96,6 @@ export default function SettingsPage() {
   const [cloudAuth, setCloudAuth] = useState<CloudAuthStatus | null>(null)
   const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus | null>(null)
   const [cloudSummary, setCloudSummary] = useState<CloudUsageSummary | null>(null)
-  const [cloudEmail, setCloudEmail] = useState('')
-  const [cloudOtp, setCloudOtp] = useState('')
-  const [cloudOtpSent, setCloudOtpSent] = useState(false)
   const [cloudMessage, setCloudMessage] = useState('')
   const [updateProvider, setUpdateProvider] = useState<UpdateProviderSettings['provider']>('none')
   const [githubOwner, setGithubOwner] = useState('')
@@ -303,32 +298,6 @@ export default function SettingsPage() {
     }
   }
 
-  const onRequestCloudOtp = async () => {
-    setCloudBusy(true)
-    try {
-      const result = await api.requestCloudEmailOtp(cloudEmail)
-      setCloudMessage(result.message)
-      setCloudOtpSent(result.ok)
-    } finally {
-      setCloudBusy(false)
-    }
-  }
-
-  const onVerifyCloudOtp = async () => {
-    setCloudBusy(true)
-    try {
-      const result = await api.verifyCloudEmailOtp(cloudEmail, cloudOtp)
-      setCloudMessage(result.message)
-      if (result.ok) {
-        setCloudOtp('')
-        setCloudOtpSent(false)
-        await reloadCloud()
-      }
-    } finally {
-      setCloudBusy(false)
-    }
-  }
-
   const onCloudOAuth = async (provider: 'github' | 'google') => {
     setCloudBusy(true)
     try {
@@ -470,72 +439,15 @@ export default function SettingsPage() {
           )}
 
           {!cloudAuth?.authenticated ? (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
-                <label className="text-xs text-slate-500 dark:text-slate-400">
-                  邮箱验证码登录
-                  <input
-                    type="email"
-                    value={cloudEmail}
-                    onChange={(e) => setCloudEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={onRequestCloudOtp}
-                  disabled={cloudBusy || !cloudEmail.trim() || !cloudStatus?.configured}
-                  className="self-end inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs text-white hover:bg-brand-600 disabled:opacity-50 transition"
-                >
-                  <Mail className="w-3.5 h-3.5" />
-                  发送验证码
-                </button>
-              </div>
-              {cloudOtpSent && (
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="text-xs text-slate-500 dark:text-slate-400">
-                    6 位验证码
-                    <input
-                      value={cloudOtp}
-                      onChange={(e) => setCloudOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      inputMode="numeric"
-                      placeholder="123456"
-                      className="mt-1 w-32 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm tracking-[0.2em] text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={onVerifyCloudOtp}
-                    disabled={cloudBusy || cloudOtp.length !== 6}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs text-white hover:bg-emerald-600 disabled:opacity-50 transition"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    登录
-                  </button>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => void onCloudOAuth('github')}
-                  disabled={cloudBusy || !cloudStatus?.configured}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800 disabled:opacity-50 transition"
-                >
-                  <Github className="w-3.5 h-3.5" />
-                  GitHub 登录
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void onCloudOAuth('google')}
-                  disabled={cloudBusy || !cloudStatus?.configured}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 transition dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
-                >
-                  <span className="text-sm font-semibold">G</span>
-                  Google 登录
-                </button>
-              </div>
-            </>
+            <button
+              type="button"
+              onClick={() => void onCloudOAuth('github')}
+              disabled={cloudBusy || !cloudStatus?.configured}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800 disabled:opacity-50 transition"
+            >
+              <Github className="w-3.5 h-3.5" />
+              GitHub 登录
+            </button>
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
