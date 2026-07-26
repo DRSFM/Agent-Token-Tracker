@@ -64,6 +64,82 @@ export interface RequestRecord {
   totalTokens: number
 }
 
+/** 云同步只允许上传的统计事件。不得加入 prompt、回复、文件路径或凭证字段。 */
+export interface CloudUsageEvent {
+  schemaVersion: 1
+  eventId: string
+  occurredAt: string
+  source: AgentSource
+  usageChannel: UsageChannel
+  upstreamId?: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  cacheTokens: number
+  rawTotalTokens: number
+  weightedTotalTokens: number
+  requestCount: 1
+}
+
+export type CloudSyncHistoryMode = 'ask' | 'include' | 'future-only'
+
+export interface CloudSyncSettings {
+  enabled: boolean
+  historyMode: CloudSyncHistoryMode
+  /** `future-only` 模式只同步此时间之后产生的记录。 */
+  syncFrom?: string
+}
+
+export type CloudAuthProvider = 'email' | 'github' | 'google'
+
+export interface CloudAuthStatus {
+  authenticated: boolean
+  email?: string
+  userId?: string
+  provider?: CloudAuthProvider
+  expiresAt?: string
+}
+
+export interface CloudSyncStatus {
+  configured: boolean
+  enabled: boolean
+  authenticated: boolean
+  lastSyncedAt?: string
+  pendingCount: number
+  lastError?: string
+}
+
+export interface CloudUsageBreakdown {
+  key: string
+  label: string
+  requestCount: number
+  rawTotalTokens: number
+  weightedTotalTokens: number
+}
+
+export interface CloudUsageSummary {
+  requestCount: number
+  rawTotalTokens: number
+  weightedTotalTokens: number
+  bySource: CloudUsageBreakdown[]
+  byModel: CloudUsageBreakdown[]
+  byDevice: CloudUsageBreakdown[]
+}
+
+export interface CloudActionResult {
+  ok: boolean
+  message: string
+}
+
+export interface CloudOAuthStartResponse extends CloudActionResult {
+  loginId?: string
+  provider?: 'github' | 'google'
+  authUrl?: string
+  redirectUri?: string
+}
+
 /** 概览页顶部的 4 个统计卡片 */
 export interface OverviewStats {
   /** 今日加权估算总量 */
@@ -428,6 +504,39 @@ export interface TokenAPI {
 
   /** 同步远程日志到本地缓存并触发重扫 */
   syncRemoteLogs(): Promise<{ ok: boolean; message: string; syncedAt?: string }>
+
+  /** 获取默认关闭的云同步设置。 */
+  getCloudSyncSettings(): Promise<CloudSyncSettings>
+
+  /** 保存云同步设置；首次开启时 historyMode 必须由用户明确选择。 */
+  setCloudSyncSettings(settings: CloudSyncSettings): Promise<CloudSyncSettings>
+
+  /** 获取云账号状态。不会返回 access token 或 refresh token。 */
+  getCloudAuthStatus(): Promise<CloudAuthStatus>
+
+  /** 发送邮箱验证码。 */
+  requestCloudEmailOtp(email: string): Promise<CloudActionResult>
+
+  /** 验证邮箱验证码并建立安全会话。 */
+  verifyCloudEmailOtp(email: string, token: string): Promise<CloudActionResult>
+
+  /** 使用系统浏览器开始 GitHub / Google PKCE OAuth。 */
+  startCloudOAuth(provider: 'github' | 'google'): Promise<CloudOAuthStartResponse>
+
+  /** 等待 OAuth 回调并完成登录。 */
+  completeCloudOAuth(loginId: string): Promise<CloudActionResult>
+
+  /** 退出云账号并清除本机加密会话。 */
+  signOutCloud(): Promise<CloudActionResult>
+
+  /** 获取 outbox 与最近同步状态。 */
+  getCloudSyncStatus(): Promise<CloudSyncStatus>
+
+  /** 手动捕获当前统计并同步到云端。 */
+  syncCloudNow(): Promise<CloudSyncStatus>
+
+  /** 读取当前账号的跨设备汇总；不返回原始日志内容。 */
+  getCloudUsageSummary(): Promise<CloudUsageSummary>
 
   /** 获取网络设置。代理只在主进程用于余量查询。 */
   getNetworkSettings(): Promise<NetworkSettings>

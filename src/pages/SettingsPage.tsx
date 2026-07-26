@@ -13,11 +13,22 @@ import {
   Globe2,
   Save,
   Server,
+  Cloud,
+  Github,
+  Mail,
+  LogIn,
+  LogOut,
+  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import type {
+  CloudAuthStatus,
+  CloudSyncHistoryMode,
+  CloudSyncSettings,
+  CloudSyncStatus,
+  CloudUsageSummary,
   DataSourceStatus,
   NetworkSettings,
   OpenLocalPathTarget,
@@ -80,6 +91,17 @@ export default function SettingsPage() {
     quotaProxyUrl: '',
   })
   const [networkMessage, setNetworkMessage] = useState('')
+  const [cloudSettings, setCloudSettings] = useState<CloudSyncSettings>({
+    enabled: false,
+    historyMode: 'ask',
+  })
+  const [cloudAuth, setCloudAuth] = useState<CloudAuthStatus | null>(null)
+  const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus | null>(null)
+  const [cloudSummary, setCloudSummary] = useState<CloudUsageSummary | null>(null)
+  const [cloudEmail, setCloudEmail] = useState('')
+  const [cloudOtp, setCloudOtp] = useState('')
+  const [cloudOtpSent, setCloudOtpSent] = useState(false)
+  const [cloudMessage, setCloudMessage] = useState('')
   const [updateProvider, setUpdateProvider] = useState<UpdateProviderSettings['provider']>('none')
   const [githubOwner, setGithubOwner] = useState('')
   const [githubRepo, setGithubRepo] = useState('')
@@ -87,6 +109,7 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false)
   const [remoteBusy, setRemoteBusy] = useState(false)
   const [networkBusy, setNetworkBusy] = useState(false)
+  const [cloudBusy, setCloudBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -110,6 +133,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void reloadNetwork()
+  }, [])
+
+  useEffect(() => {
+    void reloadCloud()
   }, [])
 
   useEffect(() => {
@@ -159,6 +186,26 @@ export default function SettingsPage() {
       setNetworkMessage(settings.quotaProxyUrl ? '余量查询将通过代理访问 ChatGPT。' : '未配置代理，余量查询将直连。')
     } catch {
       setNetworkMessage('读取网络配置失败。')
+    }
+  }
+
+  const reloadCloud = async () => {
+    try {
+      const [settings, auth, nextStatus, summary] = await Promise.all([
+        api.getCloudSyncSettings(),
+        api.getCloudAuthStatus(),
+        api.getCloudSyncStatus(),
+        api.getCloudUsageSummary(),
+      ])
+      setCloudSettings(settings)
+      setCloudAuth(auth)
+      setCloudStatus(nextStatus)
+      setCloudSummary(summary)
+      if (nextStatus.lastError) setCloudMessage(nextStatus.lastError)
+    } catch {
+      setCloudAuth({ authenticated: false })
+      setCloudSummary(null)
+      setCloudMessage('读取云同步状态失败。')
     }
   }
 
@@ -256,6 +303,106 @@ export default function SettingsPage() {
     }
   }
 
+  const onRequestCloudOtp = async () => {
+    setCloudBusy(true)
+    try {
+      const result = await api.requestCloudEmailOtp(cloudEmail)
+      setCloudMessage(result.message)
+      setCloudOtpSent(result.ok)
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  const onVerifyCloudOtp = async () => {
+    setCloudBusy(true)
+    try {
+      const result = await api.verifyCloudEmailOtp(cloudEmail, cloudOtp)
+      setCloudMessage(result.message)
+      if (result.ok) {
+        setCloudOtp('')
+        setCloudOtpSent(false)
+        await reloadCloud()
+      }
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  const onCloudOAuth = async (provider: 'github' | 'google') => {
+    setCloudBusy(true)
+    try {
+      const started = await api.startCloudOAuth(provider)
+      setCloudMessage(started.message)
+      if (started.ok && started.loginId) {
+        const result = await api.completeCloudOAuth(started.loginId)
+        setCloudMessage(result.message)
+        if (result.ok) await reloadCloud()
+      }
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  const onCloudSignOut = async () => {
+    setCloudBusy(true)
+    try {
+      const result = await api.signOutCloud()
+      setCloudMessage(result.message)
+      await reloadCloud()
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  const onSaveCloudSettings = async () => {
+    if (!cloudAuth?.authenticated) {
+      setCloudMessage('请先登录云端账号。')
+      return
+    }
+    if (cloudSettings.enabled && cloudSettings.historyMode === 'ask') {
+      setCloudMessage('请先选择是否上传已有历史统计。')
+      return
+    }
+    setCloudBusy(true)
+    try {
+      const saved = await api.setCloudSyncSettings(cloudSettings)
+      setCloudSettings(saved)
+      setCloudMessage(saved.enabled ? '云同步已开启。' : '云同步已关闭，本地统计仍会继续工作。')
+      await reloadCloud()
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  const onSyncCloud = async () => {
+    setCloudBusy(true)
+    try {
+      const result = await api.syncCloudNow()
+      setCloudStatus(result)
+      setCloudSummary(await api.getCloudUsageSummary())
+      const message = result.lastError
+        ?? (!result.enabled
+          ? '请先开启云同步。'
+          : !result.authenticated
+            ? '请先登录云端账号。'
+            : result.pendingCount > 0
+              ? `已同步一部分，仍有 ${formatNumber(result.pendingCount)} 条待上传。`
+              : '同步完成。')
+      setCloudMessage(message)
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  const setCloudHistoryMode = (historyMode: CloudSyncHistoryMode) => {
+    setCloudSettings((current) => ({
+      ...current,
+      historyMode,
+      syncFrom: historyMode === 'future-only' ? current.syncFrom ?? new Date().toISOString() : undefined,
+    }))
+  }
+
   const onSaveUpdateSettings = async () => {
     setUpdateBusy(true)
     try {
@@ -300,6 +447,218 @@ export default function SettingsPage() {
         <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-50">设置</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">外观与数据源偏好</p>
       </div>
+
+      <Card>
+        <CardHeader
+          title="云账号与同步"
+          subtitle={
+            cloudAuth?.authenticated
+              ? `${cloudAuth.email ?? '已登录'} · ${cloudSettings.enabled ? '同步已开启' : '同步默认关闭'}`
+              : '跨设备汇总 token、模型、来源、时间和请求数'
+          }
+          action={
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-300">
+              <Cloud className="w-4 h-4" />
+            </span>
+          }
+        />
+        <CardBody className="space-y-4">
+          {!cloudStatus?.configured && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              尚未配置独立 Supabase 项目。当前仍可使用全部本地统计功能；配置后再启用云同步。
+            </div>
+          )}
+
+          {!cloudAuth?.authenticated ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                <label className="text-xs text-slate-500 dark:text-slate-400">
+                  邮箱验证码登录
+                  <input
+                    type="email"
+                    value={cloudEmail}
+                    onChange={(e) => setCloudEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={onRequestCloudOtp}
+                  disabled={cloudBusy || !cloudEmail.trim() || !cloudStatus?.configured}
+                  className="self-end inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs text-white hover:bg-brand-600 disabled:opacity-50 transition"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  发送验证码
+                </button>
+              </div>
+              {cloudOtpSent && (
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-xs text-slate-500 dark:text-slate-400">
+                    6 位验证码
+                    <input
+                      value={cloudOtp}
+                      onChange={(e) => setCloudOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      inputMode="numeric"
+                      placeholder="123456"
+                      className="mt-1 w-32 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 px-3 py-2 text-sm tracking-[0.2em] text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/30"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={onVerifyCloudOtp}
+                    disabled={cloudBusy || cloudOtp.length !== 6}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs text-white hover:bg-emerald-600 disabled:opacity-50 transition"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    登录
+                  </button>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => void onCloudOAuth('github')}
+                  disabled={cloudBusy || !cloudStatus?.configured}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800 disabled:opacity-50 transition"
+                >
+                  <Github className="w-3.5 h-3.5" />
+                  GitHub 登录
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onCloudOAuth('google')}
+                  disabled={cloudBusy || !cloudStatus?.configured}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 transition dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
+                >
+                  <span className="text-sm font-semibold">G</span>
+                  Google 登录
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300">
+                    <ShieldCheck className="w-4 h-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-slate-700 dark:text-slate-200">{cloudAuth.email ?? '云端账号'}</div>
+                    <div className="text-xs text-slate-400">{cloudAuth.provider === 'email' ? '邮箱' : cloudAuth.provider === 'github' ? 'GitHub' : 'Google'}</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onCloudSignOut}
+                  disabled={cloudBusy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 disabled:opacity-50 transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  退出登录
+                </button>
+              </div>
+
+              <div>
+                <div className="mb-2 text-sm text-slate-600 dark:text-slate-300">首次登录的数据范围</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {([
+                    ['include', '包含已有历史', '上传本机已扫描的统计记录，跨设备统一汇总。'],
+                    ['future-only', '仅同步今后数据', '不上传历史，从现在开始记录新的统计。'],
+                  ] as const).map(([value, label, description]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setCloudHistoryMode(value)}
+                      className={cn(
+                        'text-left rounded-lg border px-3 py-2 transition',
+                        cloudSettings.historyMode === value
+                          ? 'border-brand-500/50 bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                          : 'border-slate-200 bg-white/60 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300',
+                      )}
+                    >
+                      <div className="text-xs font-medium">{label}</div>
+                      <div className="mt-1 text-[11px] text-slate-400">{description}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm text-slate-600 dark:text-slate-300">启用云同步</div>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">仅上传 token、模型、来源、时间和请求数，不上传 prompt、回复或本地日志。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCloudSettings((current) => ({ ...current, enabled: !current.enabled }))}
+                  disabled={cloudSettings.historyMode === 'ask'}
+                  aria-pressed={cloudSettings.enabled}
+                  className={cn(
+                    'relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-50',
+                    cloudSettings.enabled ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-700',
+                  )}
+                >
+                  <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition', cloudSettings.enabled ? 'left-5' : 'left-0.5')} />
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onSaveCloudSettings}
+                  disabled={cloudBusy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-xs text-white hover:bg-brand-600 disabled:opacity-50 transition"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  保存同步设置
+                </button>
+                <button
+                  type="button"
+                  onClick={onSyncCloud}
+                  disabled={cloudBusy || !cloudSettings.enabled}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 disabled:opacity-50 transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  <RefreshCcw className={cn('w-3.5 h-3.5', cloudBusy && 'animate-spin')} />
+                  立即同步
+                </button>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="text-sm text-slate-600 dark:text-slate-300">所有设备合计</div>
+                  <span className="text-xs text-slate-400">{formatNumber(cloudSummary?.byDevice.length ?? 0)} 台设备</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <DataTile label="加权 Token" value={cloudSummary?.weightedTotalTokens ?? 0} />
+                  <DataTile label="原始 Token" value={cloudSummary?.rawTotalTokens ?? 0} />
+                  <DataTile label="请求数" value={cloudSummary?.requestCount ?? 0} />
+                </div>
+                {(cloudSummary?.bySource.length ?? 0) > 0 && (
+                  <div className="mt-3 space-y-1.5">
+                    {cloudSummary!.bySource.slice(0, 6).map((item) => (
+                      <div key={item.key} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="truncate text-slate-500 dark:text-slate-400">{item.label}</span>
+                        <span className="shrink-0 tabular-nums text-slate-700 dark:text-slate-200">{formatNumber(item.weightedTotalTokens)} token · {formatNumber(item.requestCount)} 次</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {(cloudMessage || cloudStatus) && (
+            <div className="rounded-xl border border-slate-200/70 bg-slate-50/80 px-3 py-2 text-sm text-slate-600 dark:border-slate-700/60 dark:bg-slate-800/50 dark:text-slate-300">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>{cloudMessage || (cloudStatus?.enabled ? '云同步已开启。' : '云同步默认关闭。')}</span>
+                {cloudStatus?.enabled && <span className="text-xs text-slate-400">待上传 {formatNumber(cloudStatus.pendingCount)}</span>}
+              </div>
+              {cloudStatus?.lastSyncedAt && <div className="mt-1 text-xs text-slate-400">上次同步 {formatRelativeMinutes(cloudStatus.lastSyncedAt)}</div>}
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title="外观" subtitle="主题模式与背景图" />

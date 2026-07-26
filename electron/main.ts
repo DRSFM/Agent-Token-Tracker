@@ -6,12 +6,16 @@
 
 import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
-import { registerIpcHandlers } from './ipc-handlers'
+import { initializeCloudSync, registerIpcHandlers } from './ipc-handlers'
 import { initUpdateService } from './updater'
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL
 const shouldOpenDevTools = process.env.TOKEN_DASHBOARD_DEVTOOLS === '1'
 const iconPath = path.join(__dirname, '../assets/app-icon.png')
+
+if (isDev) {
+  app.setPath('userData', path.join(app.getPath('userData'), 'development'))
+}
 
 let mainWindow: BrowserWindow | null = null
 
@@ -53,6 +57,9 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   initUpdateService()
   createWindow()
+  void initializeCloudSync().catch((error) => {
+    console.warn('[cloud-sync] startup capture failed', error)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

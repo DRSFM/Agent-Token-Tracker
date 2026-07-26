@@ -453,6 +453,53 @@ export const mockAPI: TokenAPI = {
   async syncRemoteLogs() {
     return { ok: false, message: 'Mock 环境不可同步 SSH。' }
   },
+  async getCloudSyncSettings() {
+    return { enabled: false, historyMode: 'ask' }
+  },
+  async setCloudSyncSettings(settings) {
+    return settings
+  },
+  async getCloudAuthStatus() {
+    return { authenticated: false }
+  },
+  async requestCloudEmailOtp() {
+    return { ok: true, message: 'Mock：验证码已发送。' }
+  },
+  async verifyCloudEmailOtp() {
+    return { ok: true, message: 'Mock：邮箱登录成功。' }
+  },
+  async startCloudOAuth(provider) {
+    return {
+      ok: true,
+      message: 'Mock：已打开浏览器。',
+      loginId: `mock-${provider}`,
+      provider,
+      authUrl: `https://example.com/oauth/${provider}`,
+      redirectUri: 'http://127.0.0.1:12345/auth/callback',
+    }
+  },
+  async completeCloudOAuth() {
+    return { ok: true, message: 'Mock：OAuth 登录成功。' }
+  },
+  async signOutCloud() {
+    return { ok: true, message: 'Mock：已退出云账号。' }
+  },
+  async getCloudSyncStatus() {
+    return { configured: false, enabled: false, authenticated: false, pendingCount: 0 }
+  },
+  async syncCloudNow() {
+    return { configured: false, enabled: false, authenticated: false, pendingCount: 0 }
+  },
+  async getCloudUsageSummary() {
+    return {
+      requestCount: 0,
+      rawTotalTokens: 0,
+      weightedTotalTokens: 0,
+      bySource: [],
+      byModel: [],
+      byDevice: [],
+    }
+  },
   async getNetworkSettings() {
     return { quotaProxyUrl: 'http://127.0.0.1:7897' }
   },

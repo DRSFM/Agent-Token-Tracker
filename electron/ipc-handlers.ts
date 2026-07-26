@@ -37,6 +37,16 @@ import { getQuotaVisibilitySettings, setQuotaVisibilitySettings } from './quota-
 import { syncQuotaToCpa } from './cpa-sync'
 import { getNetworkSettings, setNetworkSettings } from './network-settings'
 import {
+  completeCloudOAuth,
+  getCloudAuthStatus,
+  getCloudUserId,
+  requestCloudEmailOtp,
+  signOutCloud,
+  startCloudOAuth,
+  verifyCloudEmailOtp,
+} from './cloud-auth'
+import { cloudSyncService } from './cloud-sync'
+import {
   completeCodexOAuthLogin,
   deleteCodexCredential,
   exportCodexCredential,
@@ -58,6 +68,23 @@ function broadcastDataChanged() {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('token:dataChanged')
   }
+}
+
+async function captureCloudUsage() {
+  const settings = await cloudSyncService.getSettings()
+  if (!settings.enabled || settings.historyMode === 'ask') return false
+  if (!await getCloudUserId()) return false
+  await cloudSyncService.captureRecords(await tokenDataStore.getAllRequests(), settings)
+  return true
+}
+
+async function captureCloudUsageAndSync() {
+  if (await captureCloudUsage()) void cloudSyncService.syncNow()
+}
+
+export async function initializeCloudSync() {
+  await tokenDataStore.ensureScanned()
+  await captureCloudUsageAndSync()
 }
 
 export function registerIpcHandlers() {
@@ -91,6 +118,7 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('token:rescan', async () => {
     const state = await tokenDataStore.rescan()
+    await captureCloudUsageAndSync()
     broadcastDataChanged()
     return { scannedFiles: state.scannedFiles, newRequests: state.records.length }
   })
@@ -98,6 +126,7 @@ export function registerIpcHandlers() {
   ipcMain.handle('token:clearCache', async () => {
     const result = await tokenDataStore.clearCache()
     const state = await tokenDataStore.rescan()
+    await captureCloudUsageAndSync()
     broadcastDataChanged()
     return { cleared: result.cleared && state.scannedFiles >= 0 }
   })
@@ -151,10 +180,40 @@ export function registerIpcHandlers() {
     const result = await syncRemoteLogs()
     if (result.ok) {
       await tokenDataStore.rescan()
+      await captureCloudUsageAndSync()
       broadcastDataChanged()
     }
     return result
   })
+  ipcMain.handle('token:getCloudSyncSettings', async () => cloudSyncService.getSettings())
+  ipcMain.handle('token:setCloudSyncSettings', async (_e, settings) => {
+    const records = settings.enabled ? await tokenDataStore.getAllRequests() : []
+    const saved = await cloudSyncService.setSettings(settings, records)
+    if (saved.enabled && await getCloudUserId()) void cloudSyncService.syncNow()
+    return saved
+  })
+  ipcMain.handle('token:getCloudAuthStatus', async () => getCloudAuthStatus())
+  ipcMain.handle('token:requestCloudEmailOtp', async (_e, email: string) => requestCloudEmailOtp(email))
+  ipcMain.handle('token:verifyCloudEmailOtp', async (_e, email: string, token: string) => {
+    const result = await verifyCloudEmailOtp(email, token)
+    if (result.ok) await captureCloudUsageAndSync()
+    return result
+  })
+  ipcMain.handle('token:startCloudOAuth', async (_e, provider: 'github' | 'google') =>
+    startCloudOAuth(provider),
+  )
+  ipcMain.handle('token:completeCloudOAuth', async (_e, loginId: string) => {
+    const result = await completeCloudOAuth(loginId)
+    if (result.ok) await captureCloudUsageAndSync()
+    return result
+  })
+  ipcMain.handle('token:signOutCloud', async () => signOutCloud())
+  ipcMain.handle('token:getCloudSyncStatus', async () => cloudSyncService.getStatus())
+  ipcMain.handle('token:syncCloudNow', async () => {
+    await captureCloudUsage()
+    return cloudSyncService.syncNow()
+  })
+  ipcMain.handle('token:getCloudUsageSummary', async () => cloudSyncService.getUsageSummary())
   ipcMain.handle('token:getNetworkSettings', async () => getNetworkSettings())
   ipcMain.handle('token:setNetworkSettings', async (_e, settings) => setNetworkSettings(settings))
   ipcMain.handle('token:getQuotaStatus', async (_e, force?: boolean) =>
@@ -227,9 +286,14 @@ export function registerIpcHandlers() {
     return { ok: true }
   })
 
-  tokenDataStore.startWatching(broadcastDataChanged)
+  tokenDataStore.startWatching(() => {
+    broadcastDataChanged()
+    void captureCloudUsageAndSync().catch((error) => {
+      console.warn('[cloud-sync] capture after file change failed', error)
+    })
+  })
   app.on('before-quit', () => {
-    void tokenDataStore.stopWatching()
+    void Promise.all([tokenDataStore.stopWatching(), cloudSyncService.close()])
   })
 }
 

@@ -480,6 +480,11 @@ export class TokenDataStore {
     return records.slice(0, Math.max(0, limit))
   }
 
+  async getAllRequests(): Promise<RequestRecord[]> {
+    const { records } = await this.ensureScanned()
+    return [...records]
+  }
+
   async getReplayFilesForSession(
     sessionId: string,
     source?: RequestRecord['source'],

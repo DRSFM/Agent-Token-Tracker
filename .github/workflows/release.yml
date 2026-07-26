@@ -10,9 +10,21 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  TOKEN_TRACKER_SUPABASE_URL: ${{ vars.TOKEN_TRACKER_SUPABASE_URL }}
+  TOKEN_TRACKER_SUPABASE_ANON_KEY: ${{ secrets.TOKEN_TRACKER_SUPABASE_ANON_KEY }}
+
 jobs:
+  validate-cloud-config:
+    name: Validate cloud configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require packaged-app cloud configuration
+        run: node -e "if (!process.env.TOKEN_TRACKER_SUPABASE_URL || !process.env.TOKEN_TRACKER_SUPABASE_ANON_KEY) process.exit(1)"
+
   build-windows:
     name: Build Windows
+    needs: validate-cloud-config
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -46,6 +58,7 @@ jobs:
 
   build-macos:
     name: Build macOS
+    needs: validate-cloud-config
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -81,6 +94,7 @@ jobs:
 
   build-npm:
     name: Build npm package
+    needs: validate-cloud-config
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
